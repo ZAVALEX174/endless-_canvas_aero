@@ -1,0 +1,164 @@
+/* panels.css — Правая панель свойств: табы, секции, карточки */
+
+/* Секция заголовка в панели свойств */
+.props-section-title {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-text-muted);
+  padding: 6px 0 4px;
+}
+
+/* Элемент свойства: label + value */
+.props-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 3px 0;
+  border-bottom: 1px dashed var(--color-border-light);
+  font-size: var(--font-size-base);
+}
+
+.props-item:last-child {
+  border-bottom: none;
+}
+
+.props-item__label {
+  color: var(--color-text-secondary);
+}
+
+.props-item__value {
+  color: var(--color-text-primary);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Форма редактирования в панели */
+.props-form-group {
+  margin-bottom: 6px;
+}
+
+.props-form-group label {
+  display: block;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin-bottom: 2px;
+}
+
+.props-form-group input,
+.props-form-group select {
+  width: 100%;
+}
+
+/* Кнопки внизу панели */
+.props-actions {
+  display: flex;
+  gap: 6px;
+  padding: 8px;
+  border-top: 1px solid var(--color-border-light);
+  margin-top: auto;
+}
+
+.props-actions .btn {
+  flex: 1;
+}
+
+/* Цветовые точки для выбора цвета ветви */
+.color-dots {
+  display: flex;
+  gap: 4px;
+  padding: 4px 0;
+}
+
+.color-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: border-color var(--transition-fast);
+}
+
+.color-dot:hover,
+.color-dot.active {
+  border-color: var(--color-text-primary);
+}
+
+/* Горячие клавиши — скрыть (теперь в тултипах) */
+.hotkeys-panel {
+  display: none;
+}
+
+/* Статусные бейджи в панели */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+}
+
+.status-badge--success {
+  background: var(--color-airflow-bg);
+  color: var(--color-airflow);
+}
+
+.status-badge--warning {
+  background: var(--color-fan-bg);
+  color: var(--color-fan);
+}
+
+.status-badge--error {
+  background: var(--color-fire-bg);
+  color: var(--color-fire);
+}
+
+/* Скролл в панели */
+.app-properties .panel-content {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+}
+
+.app-properties .panel-content::-webkit-scrollbar {
+  width: 4px;
+}
+
+.app-properties .panel-content::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 2px;
+}
+
+.app-properties .panel-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Таблицы внутри модалок / панелей */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-base);
+}
+
+table th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--font-size-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+table td {
+  padding: 4px 6px;
+  color: var(--color-text-primary);
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+table tr:hover td {
+  background: var(--color-hover);
+}

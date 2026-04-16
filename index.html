@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Расчёт вентиляционной сети шахтных выработок</title>
+  <script src="./js/fabric-min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+  <!-- CSS — порядок загрузки важен -->
+  <link rel="stylesheet" href="./styles/variables.css">
+  <link rel="stylesheet" href="./styles/reset.css">
+  <link rel="stylesheet" href="./styles/layout.css">
+  <link rel="stylesheet" href="./styles/components.css">
+  <link rel="stylesheet" href="./styles/canvas.css">
+  <link rel="stylesheet" href="./styles/panels.css">
+  <link rel="stylesheet" href="./styles/modal.css">
+  <link rel="stylesheet" href="./styles/animations.css">
+</head>
+
+<body>
+  <div class="app-shell">
+
+    <!-- ═══ ХЕДЕР (40px) ═══ -->
+    <header class="app-header">
+      <div class="app-header__logo">aero<span>4</span></div>
+      <nav class="app-header__menu">
+        <a href="air-demand.html" class="app-header__menu-item">Расчёт воздуха</a>
+      </nav>
+      <div class="app-header__status">
+        <button class="toolbar-btn" id="themeToggleBtn" data-tooltip="Тема" onclick="toggleTheme()" style="width:28px;height:28px;">
+          <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M15 10.5A6.5 6.5 0 0 1 7.5 3a6.5 6.5 0 1 0 7.5 7.5z"/>
+          </svg>
+        </button>
+        <div class="app-header__save-badge">
+          <span class="app-header__save-dot" id="saveDot"></span>
+          <span id="saveStatusText">Не сохранено</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- ═══ ЛЕВЫЙ ТУЛБАР (52px) ═══ -->
+    <aside class="app-toolbar">
+      <!-- Группа 1: Выделение, Линия -->
+      <div class="toolbar-group">
+        <button class="toolbar-btn" data-tooltip="Выделение" data-hotkey="Esc" onclick="deactivateAllModes()">
+          <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 3l5 14 2-5 5-2L3 3z"/>
+          </svg>
+        </button>
+        <button class="toolbar-btn" id="lineDrawingBtn" data-tooltip="Ветвь" data-hotkey="L" onclick="activateLineDrawing()">
+          <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="3" y1="15" x2="15" y2="3"/>
+            <circle cx="3" cy="15" r="2" fill="currentColor"/>
+            <circle cx="15" cy="3" r="2" fill="currentColor"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Группа 1.5: Связь слоёв -->
+      <div class="toolbar-group">
+        <button class="toolbar-btn" id="crossLayerBtn" data-tooltip="Точка связи слоёв (клик на холст = поставить/убрать)" onclick="toggleCrossLayerMode()">
+          <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="2" y1="9" x2="16" y2="9"/>
+            <line x1="9" y1="2" x2="9" y2="16"/>
+            <circle cx="9" cy="9" r="3" fill="currentColor" stroke="none"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Группа 2: Разделить, Непрерывный -->
+      <div class="toolbar-group">
+        <button class="toolbar-btn" data-tooltip="Разделить" data-hotkey="S" onclick="splitAllLines()">
+          <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="2" y1="9" x2="7" y2="9"/>
+            <line x1="11" y1="9" x2="16" y2="9"/>
+            <circle cx="9" cy="9" r="1.5" fill="currentColor"/>
+          </svg>
+        </button>
+        <button class="toolbar-btn" id="continuousModeBtn" data-tooltip="Непрерывный" onclick="toggleContinuousMode()">
+          <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="2,14 6,6 10,12 14,4"/>
+            <polyline points="12,4 14,4 14,6"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Группа 3: Расчёт, Анализ, Сброс, Анимация вентиляторов -->
+      <div class="toolbar-group">
+        <button class="toolbar-btn" id="fanAnimationBtn" data-tooltip="Анимация вентиляторов / Реверс" onclick="toggleFanAnimationAndReverse()">
+          <svg viewBox="0 0 18 18" fill="currentColor" stroke="none">
+            <circle cx="9" cy="9" r="7.5" fill="none" stroke="currentColor" stroke-width="1.2"/>
+            <circle cx="9" cy="9" r="1.4"/>
+            <path d="M9.7 7.5 C10.3 5.8 10 3.8 9 3.3 C7.8 3.8 7.5 5.8 8.3 7.5Z"/>
+            <path d="M10.2 10.3 C11.8 11.2 13.8 11.2 14.2 10 C13.5 9 11.8 8.6 10 9.4Z"/>
+            <path d="M7.8 10.3 C6.2 11.2 4.2 11.2 3.8 10 C4.5 9 6.2 8.6 8 9.4Z"/>
+          </svg>
+        </button>
+        <button class="toolbar-btn" id="calculateAirBtn" data-tooltip="Расчёт воздуха">
+          <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="9" cy="9" r="6.5"/>
+            <path d="M9 5v4l3 2"/>
+          </svg>
+        </button>
+        <button class="toolbar-btn" id="analyzePointsBtn" data-tooltip="Анализ точек">
+          <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="10" width="3" height="6"/>
+            <rect x="7" y="6" width="3" height="10"/>
+            <rect x="12" y="3" width="3" height="13"/>
+            <line x1="2" y1="4" x2="15" y2="2"/>
+          </svg>
+        </button>
+        <button class="toolbar-btn" id="resetCalcBtn" data-tooltip="Сбросить расчёт">
+          <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 9a6 6 0 1 1 1.5 4"/>
+            <polyline points="2,6 3,9 6,8"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Группа 4: Сетка, Авторазбивка -->
+      <div class="toolbar-group">
+        <button class="toolbar-btn active" id="gridToggleBtn" data-tooltip="Сетка" data-hotkey="G" onclick="toggleGrid()">
+          <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="2" width="6" height="6"/>
+            <rect x="10" y="2" width="6" height="6"/>
+            <rect x="2" y="10" width="6" height="6"/>
+            <rect x="10" y="10" width="6" height="6"/>
+          </svg>
+        </button>
+        <button class="toolbar-btn active" id="autoSplitBtn" data-tooltip="Авторазбивка" data-hotkey="A" onclick="toggleAutoSplitMode()">
+          <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 2l2 5h5l-4 3 1.5 5L9 12.5 4.5 15 6 10 2 7h5z"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Zoom controls -->
+      <div class="toolbar-group zoom-controls">
+        <button class="toolbar-btn" id="zoomInBtn" data-tooltip="Приблизить" onclick="zoomIn()">
+          <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="9" cy="9" r="6"/><line x1="6" y1="9" x2="12" y2="9"/><line x1="9" y1="6" x2="9" y2="12"/>
+          </svg>
+        </button>
+        <span class="zoom-level" id="zoomLevel" data-tooltip="Масштаб">100%</span>
+        <button class="toolbar-btn" id="zoomOutBtn" data-tooltip="Отдалить" onclick="zoomOut()">
+          <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="9" cy="9" r="6"/><line x1="6" y1="9" x2="12" y2="9"/>
+          </svg>
+        </button>
+        <button class="toolbar-btn" id="zoomResetBtn" data-tooltip="Вписать в экран" onclick="zoomReset()">
+          <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="12" height="12" rx="1"/><path d="M3 7h12M3 11h12M7 3v12M11 3v12"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Спейсер -->
+      <div class="toolbar-spacer"></div>
+
+      <!-- Внизу: Undo, Redo, Save -->
+      <div class="toolbar-group">
+        <button class="toolbar-btn" id="undoBtn" data-tooltip="Отменить" data-hotkey="Ctrl+Z" onclick="undoAction()">
+          <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 7h7a4 4 0 0 1 0 8H8"/>
+            <polyline points="7,4 4,7 7,10"/>
+          </svg>
+        </button>
+        <button class="toolbar-btn" id="redoBtn" data-tooltip="Повторить" data-hotkey="Ctrl+Y" onclick="redoAction()" disabled>
+          <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 7H7a4 4 0 0 0 0 8h3"/>
+            <polyline points="11,4 14,7 11,10"/>
+          </svg>
+        </button>
+        <button class="toolbar-btn" data-tooltip="Сохранить" data-hotkey="Ctrl+S" onclick="saveDrawing()">
+          <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M15 16H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h9l4 4v9a1 1 0 0 1-1 1z"/>
+            <polyline points="13,2 13,6 6,6"/>
+            <rect x="5" y="10" width="8" height="4"/>
+          </svg>
+        </button>
+      </div>
+    </aside>
+
+    <!-- ═══ КОНТЕКСТНАЯ ПАНЕЛЬ (38px) ═══ -->
+    <div class="app-context-bar">
+      <!-- Режимы -->
+      <button class="context-btn" id="lineSplitModeBtn" data-tooltip="Режим разделения" onclick="toggleLineSplitMode()">АВТО</button>
+
+      <span class="context-separator"></span>
+
+      <!-- Реверс -->
+      <button class="context-btn" id="toggleReverseBtn" data-tooltip="Реверс вентиляторов" onclick="toggleFanReverse()">Реверс</button>
+      <button class="context-btn" id="compareReverseBtn" data-tooltip="Сравнить режимы" onclick="compareNormalVsReverse()">Сравнить</button>
+
+      <span class="context-separator"></span>
+
+      <!-- Экспорт -->
+      <button class="context-btn" data-tooltip="PDF с параметрами" onclick="exportToPDFWithOptions()">PDF</button>
+      <button class="context-btn" data-tooltip="Быстрый PDF" onclick="quickExportToPDF()">PDF быстрый</button>
+      <button class="context-btn" data-tooltip="Экспорт CSV" onclick="exportLinePropertiesToCSV()">CSV</button>
+
+      <span class="context-separator"></span>
+
+      <button class="context-btn" data-tooltip="Пересчитать все свойства" onclick="calculateAllPropertiesForAllLines()">Пересчитать</button>
+      <button class="context-btn" data-tooltip="Отчёт о воздухе" onclick="showAirVolumeReport()">Отчёт</button>
+      <button class="context-btn" id="checkConnectionsBtn" data-tooltip="Проверить связи линий (подсветить висящие точки)" onclick="checkDanglingConnections()">Проверка связей</button>
+      <button class="context-btn" id="cleanupGhostBtn" data-tooltip="Удалить микро-линии и дубли (огрызки после сплитов)" onclick="cleanupGhostLinesUI()">Очистить мусор</button>
+      <button class="context-btn" id="flowColoringBtn" data-tooltip="Раскрасить струю: свежая — красная, исходящая (после загрязнителя/пожара) — синяя" onclick="toggleFlowColoring()">Струя</button>
+
+      <span class="context-separator"></span>
+
+      <!-- Подписи на линиях: Q/R/v + размер шрифта -->
+      <button class="context-btn active" id="lineLabel_showQBtn" data-tooltip="Показывать расход Q на линии" onclick="toggleLineLabelField('showQ')">Q</button>
+      <button class="context-btn" id="lineLabel_showRBtn" data-tooltip="Показывать сопротивление R на линии" onclick="toggleLineLabelField('showR')">R</button>
+      <button class="context-btn" id="lineLabel_showVBtn" data-tooltip="Показывать скорость v на линии" onclick="toggleLineLabelField('showV')">v</button>
+      <button class="context-btn" data-tooltip="Уменьшить шрифт подписи на линии" onclick="changeLineLabelFontSize(-1)">A−</button>
+      <button class="context-btn" data-tooltip="Увеличить шрифт подписи на линии" onclick="changeLineLabelFontSize(1)">A+</button>
+
+      <span class="context-separator"></span>
+
+      <button class="context-btn" data-tooltip="Добавить изображение" onclick="showAddImageModal()">+ Объект</button>
+      <button class="context-btn" data-tooltip="Загрузить схему" onclick="loadDrawing()">Загрузить</button>
+      <button class="context-btn btn-danger" data-tooltip="Очистить холст" onclick="clearCanvas()" style="border-color:var(--color-fire);color:var(--color-fire);">Очистить</button>
+    </div>
+
+    <!-- ═══ ХОЛСТ ═══ -->
+    <main class="app-canvas">
+      <div id="canvas-wrapper">
+        <canvas id="fabric-canvas"></canvas>
+      </div>
+
+      <!-- Легенда -->
+      <div class="canvas-legend collapsed">
+        <div class="canvas-legend__toggle">Легенда ▾</div>
+        <div class="canvas-legend__body">
+          <div class="canvas-legend__item">
+            <span class="canvas-legend__color" style="background:#2A2B3A"></span> Обычная ветвь
+          </div>
+          <div class="canvas-legend__item">
+            <span class="canvas-legend__color" style="background:#4F9AFF"></span> Выделенная
+          </div>
+          <div class="canvas-legend__item">
+            <span class="canvas-legend__color" style="background:#3DD68C"></span> Высокий расход
+          </div>
+          <div class="canvas-legend__item">
+            <span class="canvas-legend__color" style="background:#F0A500;border-top:1px dashed #F0A500"></span> Вентилятор
+          </div>
+          <div class="canvas-legend__item">
+            <span class="canvas-legend__color" style="background:#E85454"></span> Пожар
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- ═══ ПРАВАЯ ПАНЕЛЬ: РЕЙЛ (48px) + ВЫДВИЖНОЙ DRAWER (340px) ═══ -->
+    <aside class="app-properties" id="appProperties">
+      <!-- Рейл справа: 4 иконки -->
+      <div class="panel-rail">
+        <button class="panel-rail__btn" data-tab="fans" data-tooltip="Вентиляторы" aria-label="Вентиляторы">
+          <svg viewBox="0 0 18 18" fill="currentColor" stroke="none">
+            <circle cx="9" cy="9" r="7.5" fill="none" stroke="currentColor" stroke-width="1.2"/>
+            <circle cx="9" cy="9" r="1.4"/>
+            <path d="M9.7 7.5 C10.3 5.8 10 3.8 9 3.3 C7.8 3.8 7.5 5.8 8.3 7.5Z"/>
+            <path d="M10.2 10.3 C11.8 11.2 13.8 11.2 14.2 10 C13.5 9 11.8 8.6 10 9.4Z"/>
+            <path d="M7.8 10.3 C6.2 11.2 4.2 11.2 3.8 10 C4.5 9 6.2 8.6 8 9.4Z"/>
+          </svg>
+        </button>
+        <button class="panel-rail__btn" data-tab="structures" data-tooltip="Сооружения" aria-label="Сооружения">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="10" width="7" height="11"/>
+            <rect x="14" y="4" width="7" height="17"/>
+            <line x1="5" y1="13" x2="8" y2="13"/>
+            <line x1="5" y1="17" x2="8" y2="17"/>
+            <line x1="16" y1="8" x2="19" y2="8"/>
+            <line x1="16" y1="12" x2="19" y2="12"/>
+            <line x1="16" y1="16" x2="19" y2="16"/>
+          </svg>
+        </button>
+        <button class="panel-rail__btn" data-tab="objects" data-tooltip="Объекты" aria-label="Объекты">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7"/>
+            <rect x="14" y="3" width="7" height="7"/>
+            <rect x="3" y="14" width="7" height="7"/>
+            <rect x="14" y="14" width="7" height="7"/>
+          </svg>
+        </button>
+        <button class="panel-rail__btn" data-tab="layers" data-tooltip="Слои" aria-label="Слои">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="12,3 21,8 12,13 3,8"/>
+            <polyline points="3,12 12,17 21,12"/>
+            <polyline points="3,16 12,21 21,16"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Выдвижной drawer: шапка + контент -->
+      <div class="panel-drawer" id="panelDrawer">
+        <div class="panel-drawer__header">
+          <span id="panelDrawerTitle">Панель</span>
+          <button class="panel-drawer__close" id="panelDrawerClose" aria-label="Закрыть">×</button>
+        </div>
+
+        <!-- Таб: Вентиляторы -->
+        <div class="panel-content" id="fans-content" hidden>
+          <div class="image-library-grid" id="imageLibraryFans"></div>
+        </div>
+
+        <!-- Таб: Сооружения -->
+        <div class="panel-content" id="structures-content" hidden>
+          <div class="image-library-grid" id="imageLibraryStructures"></div>
+        </div>
+
+        <!-- Таб: Объекты -->
+        <div class="panel-content" id="objects-content" hidden>
+          <div class="image-library-grid" id="imageLibraryObjects"></div>
+        </div>
+
+        <!-- Таб: Слои -->
+        <div class="panel-content" id="layers-content" hidden>
+          <div class="layers-panel">
+            <button class="btn btn-secondary" id="addLayerBtn" onclick="createLayer()" style="width:100%;margin-bottom:8px;">+ Добавить слой</button>
+            <div id="layersList"></div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ═══ СТАТУС-БАР (24px) ═══ -->
+    <footer class="app-statusbar">
+      <div class="statusbar-left">
+        <span class="statusbar-dot" id="calcStatusDot"></span>
+        <span id="status">Готово к работе</span>
+      </div>
+      <div class="statusbar-center">
+        <span id="hint" style="font-size:10px; color:var(--color-text-muted);">Alt — привязка к краям &nbsp;·&nbsp; край линии — тянуть конец &nbsp;·&nbsp; <b>Ctrl+Shift+D</b> — тянуть линию целиком</span>
+      </div>
+      <div class="statusbar-right">
+        <span id="statusbar-zoom">Zoom: 100%</span>
+        <span id="statusbar-coords">x: 0 · y: 0</span>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Баннер восстановления автосохранения -->
+  <div id="autosaveRecoveryBanner" class="autosave-banner" style="display:none;">
+    <span style="font-size:16px;">&#128190;</span>
+    <span>Обнаружена несохранённая схема<span id="autosaveTime"></span>.</span>
+    <button class="btn btn-primary" onclick="restoreFromAutoSave(); document.getElementById('autosaveRecoveryBanner').style.display='none';">Восстановить</button>
+    <button class="btn btn-secondary" onclick="clearAutoSave(); document.getElementById('autosaveRecoveryBanner').style.display='none';">Начать заново</button>
+  </div>
+
+  <!-- ═══ МОДАЛЬНЫЕ ОКНА ═══ -->
+
+  <!-- Модальное окно свойств линии -->
+  <div id="linePropertiesModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title">Свойства линии</h2>
+        <button class="close-modal" onclick="closeLinePropertiesModal()">&times;</button>
+      </div>
+      <form id="linePropertiesForm" class="modal-form">
+        <div class="form-row">
+          <div class="form-group" style="flex:2">
+            <label class="form-label">Название:</label>
+            <input type="text" id="propertyName" placeholder="Например: Главная ветвь" required>
+          </div>
+          <div class="form-group" style="flex:1">
+            <label class="form-label">Номер:</label>
+            <input type="number" id="propertyNumber" min="1" step="1" value="1">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Слой:</label>
+            <select id="propertyLayer"><option value="default">Основной</option></select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Статус выработки:</label>
+            <select id="propertyStatus">
+              <option value="">— не задан —</option>
+              <option value="штрек">Штрек</option>
+              <option value="уклон">Уклон</option>
+              <option value="ствол">Ствол</option>
+              <option value="квершлаг">Квершлаг</option>
+              <option value="бремсберг">Бремсберг</option>
+              <option value="ходок">Ходок</option>
+              <option value="камера">Камера</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Отображение:</label>
+            <select id="propertyDisplay">
+              <option value="normal">Обычное</option>
+              <option value="dashed">Пунктир</option>
+              <option value="hidden">Скрыто</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Цвет:</label>
+            <input type="color" id="propertyColor" value="#6A7FDB">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Толщина:</label>
+            <select id="propertyWidth">
+              <option value="1">1 px</option>
+              <option value="2">2 px</option>
+              <option value="3">3 px</option>
+              <option value="4">4 px</option>
+              <option value="5" selected>5 px</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="propertyPassageLength">Длина ветви L (м):</label>
+            <input type="number" id="propertyPassageLength" step="0.01" min="0" value="0.5">
+          </div>
+          <div class="form-group">
+            <label for="propertySectionType">Тип сечения:</label>
+            <select id="propertySectionType">
+              <option value="Круглое">Круглое</option>
+              <option value="Арочное" selected>Арочное</option>
+              <option value="Трапециевидное">Трапециевидное</option>
+              <option value="Прямоугольное">Прямоугольное</option>
+              <option value="Квадратное">Квадратное</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="propertySupportType">Тип крепи:</label>
+            <select id="propertySupportType">
+              <option value="бетон">бетон</option>
+              <option value="торкрет" selected>торкрет</option>
+              <option value="СВП">СВП</option>
+              <option value="без крепи">без крепи</option>
+              <option value="Пользовательский">Пользовательский</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="propertyRoughnessCoefficient">Коэффициент шероховатости k (Н·с²/м⁴):</label>
+            <input type="number" id="propertyRoughnessCoefficient" step="0.000001" min="0" value="0.0019">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="propertyCrossSectionalArea">Площадь сечения S (м²):</label>
+            <input type="number" id="propertyCrossSectionalArea" step="0.01" min="0" value="10">
+          </div>
+          <div class="form-group">
+            <label for="propertyPerimeterPreview">Периметр P (м):</label>
+            <input type="text" id="propertyPerimeterPreview" value="0" readonly>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="propertyXFactorPreview">x = L × P / S:</label>
+            <input type="text" id="propertyXFactorPreview" value="0" readonly>
+          </div>
+          <div class="form-group">
+            <label for="propertyAirVolume">Граничный расход / подача Q0 (м³/с):</label>
+            <input type="number" id="propertyAirVolume" step="0.001" min="0" value="0">
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="propertyLocalObjectResistance">Obj на ветви (Н·с²/м⁴):</label>
+          <input type="number" id="propertyLocalObjectResistance" step="0.000001" min="0" value="0">
+        </div>
+
+        <!-- Модельные параметры (результаты расчёта) -->
+        <div class="model-params-section">
+          <div class="model-params-section__header">
+            <span class="model-params-section__title">Модельные параметры — считает само, но можно исправить вручную</span>
+            <div style="display:flex;gap:4px;align-items:center;">
+              <button type="button" class="btn btn-secondary" id="lineEditModelParamsBtn" onclick="toggleLineModelParamsEdit()" style="height:24px;font-size:10px;padding:0 8px;">Редактировать</button>
+              <button type="button" class="btn btn-secondary" id="lineModelParamsCancelBtn" onclick="cancelLineModelParamsEdit()" style="height:24px;font-size:10px;padding:0 8px;display:none;">Отмена</button>
+              <button type="button" class="btn btn-danger" id="lineModelParamsResetBtn" onclick="resetLineModelParams()" style="height:24px;font-size:10px;padding:0 8px;display:none;">Сбросить вручную</button>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="propertyResultFlow">Расход Q (м³/с):</label>
+              <input type="number" id="propertyResultFlow" step="0.001" disabled>
+            </div>
+            <div class="form-group">
+              <label for="propertyResultVelocity">Скорость v (м/с):</label>
+              <input type="number" id="propertyResultVelocity" step="0.01" disabled>
+            </div>
+            <div class="form-group">
+              <label for="propertyResultResistance">Сопротивление R (Н·с²/м⁴):</label>
+              <input type="number" id="propertyResultResistance" step="0.0001" disabled>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-buttons">
+          <button type="button" class="btn btn-secondary" onclick="closeLinePropertiesModal()">Отмена</button>
+          <button type="submit" class="btn btn-primary">Применить</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Модальное окно свойств объекта -->
+  <div id="objectPropertiesModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title">Свойства объекта</h2>
+        <button class="close-modal" onclick="closeObjectPropertiesModal()">&times;</button>
+      </div>
+      <form id="objectPropertiesForm" class="modal-form">
+        <div class="form-row">
+          <div class="form-group" style="flex:2">
+            <label class="form-label">Название:</label>
+            <input type="text" id="objPropertyName" placeholder="Например: Вентилятор" required>
+          </div>
+          <div class="form-group" style="flex:1">
+            <label class="form-label">Номер:</label>
+            <input type="number" id="objPropertyNumber" min="1" step="1" value="1">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Слой:</label>
+            <select id="objPropertyLayer"><option value="default">Основной</option></select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Статус выработки:</label>
+            <select id="objPropertyStatus">
+              <option value="">— не задан —</option>
+              <option value="штрек">Штрек</option>
+              <option value="уклон">Уклон</option>
+              <option value="ствол">Ствол</option>
+              <option value="квершлаг">Квершлаг</option>
+              <option value="бремсберг">Бремсберг</option>
+              <option value="ходок">Ходок</option>
+              <option value="камера">Камера</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Тип объекта:</label>
+          <select id="objPropertyType">
+            <option value="default">Обычный объект</option>
+            <option value="fan">Вентилятор</option>
+            <option value="fire">Пожар</option>
+            <option value="valve">Вентдверь / перемычка</option>
+            <option value="pump">Насос</option>
+            <option value="atmosphere">Атмосферная связь</option>
+            <option value="sensor">Датчик</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">X:</label>
+            <input type="number" id="objPropertyX" placeholder="X" step="1">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Y:</label>
+            <input type="number" id="objPropertyY" placeholder="Y" step="1">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Ширина:</label>
+            <input type="number" id="objPropertyWidth" placeholder="Ширина" step="1" min="10" max="500">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Высота:</label>
+            <input type="number" id="objPropertyHeight" placeholder="Высота" step="1" min="10" max="500">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="objAirVolume">Подача / расход Q0 (м³/с):</label>
+            <input type="number" step="0.1" id="objAirVolume" name="objAirVolume">
+          </div>
+          <div class="form-group">
+            <label for="objAirResistance">Локальное сопротивление Robj (Н·с²/м⁴):</label>
+            <input type="number" step="0.00001" id="objAirResistance" name="objAirResistance">
+          </div>
+        </div>
+        <div class="form-row" id="objFanModeRow" style="display:none;">
+          <div class="form-group">
+            <label for="objFanMode">Режим вентилятора:</label>
+            <select id="objFanMode">
+              <option value="supply">Подача</option>
+              <option value="reverse">Реверс (всасывание)</option>
+            </select>
+          </div>
+          <div class="form-group" style="display:flex;align-items:center;gap:8px;">
+            <input type="checkbox" id="objIsFlowSource" checked onchange="updateObjectPropertyVisibility()">
+            <label for="objIsFlowSource" style="cursor:pointer;font-weight:600;color:var(--color-accent);">
+              Начало подачи воздуха
+            </label>
+          </div>
+        </div>
+        <div class="form-row" id="objLocalFanRow" style="display:none;">
+          <div class="form-group">
+            <label for="objFanStaticPressure">Давление ВМП (Па):</label>
+            <input type="number" step="1" min="0" id="objFanStaticPressure" value="0">
+          </div>
+          <div class="form-group">
+            <label for="objLocalFanFlow">Расход ВМП (м³/с):</label>
+            <input type="number" step="0.001" min="0" id="objLocalFanFlow" value="0">
+          </div>
+        </div>
+        <div class="form-row" id="objConsumerRow" style="display:none;">
+          <div class="form-group" style="display:flex;align-items:center;gap:8px;">
+            <input type="checkbox" id="objIsConsumer" onchange="updateObjectPropertyVisibility()">
+            <label for="objIsConsumer" style="cursor:pointer;font-weight:600;color:var(--color-accent);">
+              Потребитель воздуха (пожар/утечка)
+            </label>
+          </div>
+          <div class="form-group" id="objConsumeFlowGroup">
+            <label for="objConsumeFlow">Потребляемый расход (м³/с):</label>
+            <input type="number" step="0.001" min="0" id="objConsumeFlow" value="0">
+          </div>
+        </div>
+        <div class="form-row" id="objDoorModeRow" style="display:none;">
+          <div class="form-group">
+            <label for="objDoorMode">Режим вентдвери:</label>
+            <select id="objDoorMode">
+              <option value="open">Дверь открыта</option>
+              <option value="closed">Дверь закрыта</option>
+              <option value="window">Дверь с вентокном</option>
+            </select>
+          </div>
+          <div class="form-group" id="objWindowAreaRow">
+            <label for="objWindowArea">Площадь вентокна:</label>
+            <select id="objWindowArea">
+              <option value="1">1 м²</option>
+              <option value="1.5">1.5 м²</option>
+              <option value="2">2 м²</option>
+              <option value="2.5">2.5 м²</option>
+              <option value="3">3 м²</option>
+              <option value="3.5">3.5 м²</option>
+              <option value="4">4 м²</option>
+              <option value="4.5">4.5 м²</option>
+              <option value="5">5 м²</option>
+            </select>
+          </div>
+        </div>
+        <div id="objAtmosphereCard" style="display:none;">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="objAtmosphereHeight">Высота H (м):</label>
+              <input type="number" step="0.01" id="objAtmosphereHeight" value="0">
+            </div>
+            <div class="form-group">
+              <label for="objAtmosphereSign">Знак влияния:</label>
+              <select id="objAtmosphereSign">
+                <option value="1">Положительный</option>
+                <option value="-1">Отрицательный</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="objAtmosphereTemp1">t1, ср (°C):</label>
+              <input type="number" step="0.01" id="objAtmosphereTemp1" value="0">
+            </div>
+            <div class="form-group">
+              <label for="objAtmosphereTemp2">t2, ср (°C):</label>
+              <input type="number" step="0.01" id="objAtmosphereTemp2" value="0">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="objAtmosphereHeMm">he (мм вод. ст.):</label>
+              <input type="text" id="objAtmosphereHeMm" value="0" readonly>
+            </div>
+            <div class="form-group">
+              <label for="objAtmosphereHePa">He (Па):</label>
+              <input type="text" id="objAtmosphereHePa" value="0" readonly>
+            </div>
+          </div>
+        </div>
+        <!-- Модельные параметры объекта -->
+        <div class="model-params-section">
+          <div class="model-params-section__header">
+            <span class="model-params-section__title">Модельные параметры — считает само, но можно исправить вручную</span>
+            <div style="display:flex;gap:4px;align-items:center;">
+              <button type="button" class="btn btn-secondary" id="objEditModelParamsBtn" onclick="toggleObjModelParamsEdit()" style="height:24px;font-size:10px;padding:0 8px;">Редактировать</button>
+              <button type="button" class="btn btn-secondary" id="objModelParamsCancelBtn" onclick="cancelObjModelParamsEdit()" style="height:24px;font-size:10px;padding:0 8px;display:none;">Отмена</button>
+              <button type="button" class="btn btn-danger" id="objModelParamsResetBtn" onclick="resetObjModelParams()" style="height:24px;font-size:10px;padding:0 8px;display:none;">Сбросить вручную</button>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="objResultFlow">Расход Q (м³/с):</label>
+              <input type="number" id="objResultFlow" step="0.001" disabled>
+            </div>
+            <div class="form-group">
+              <label for="objResultVelocity">Скорость v (м/с):</label>
+              <input type="number" id="objResultVelocity" step="0.01" disabled>
+            </div>
+            <div class="form-group">
+              <label for="objResultResistance">Сопротивление R (Н·с²/м⁴):</label>
+              <input type="number" id="objResultResistance" step="0.0001" disabled>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-buttons">
+          <button type="button" class="btn btn-danger" onclick="deleteCurrentObject()">Удалить</button>
+          <button type="button" class="btn btn-secondary" onclick="closeObjectPropertiesModal()">Отмена</button>
+          <button type="submit" class="btn btn-primary">Сохранить</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Модальное окно добавления изображения -->
+  <div id="addImageModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title">Добавить изображение</h2>
+        <button class="close-modal" onclick="closeAddImageModal()">&times;</button>
+      </div>
+      <form id="addImageForm" class="modal-form">
+        <div class="form-group">
+          <label class="form-label">URL изображения:</label>
+          <input type="url" id="newImageUrl" placeholder="https://example.com/image.png">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Название:</label>
+          <input type="text" id="newImageName" placeholder="Например: Вентилятор" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Тип объекта:</label>
+          <select id="newImageType">
+            <option value="default">Обычный объект</option>
+            <option value="fan">Вентилятор</option>
+            <option value="fire">Пожар</option>
+            <option value="valve">Вентдверь / перемычка</option>
+            <option value="pump">Насос</option>
+            <option value="atmosphere">Атмосферная связь</option>
+            <option value="sensor">Датчик</option>
+          </select>
+        </div>
+        <div class="modal-buttons">
+          <button type="button" class="btn btn-secondary" onclick="closeAddImageModal()">Отмена</button>
+          <button type="submit" class="btn btn-primary">Добавить</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Модальное окно информации о точке -->
+  <div id="intersectionPointModal" class="modal">
+    <div class="modal-content" style="max-width: 800px;">
+      <div class="modal-header">
+        <h2 class="modal-title">Информация о точке разделения</h2>
+        <button class="close-modal" onclick="closeIntersectionPointModal()">&times;</button>
+      </div>
+      <div id="intersectionPointInfo" style="padding: 20px;"></div>
+      <div class="modal-buttons">
+        <button class="btn btn-secondary" onclick="closeIntersectionPointModal()">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Модальное окно отчета о воздухе -->
+  <div id="airVolumeReportModal" class="modal">
+    <div class="modal-content" style="max-width: 800px; max-height: 80vh; overflow-y: auto;">
+      <div class="modal-header">
+        <h3>Отчет о передаче объемов воздуха</h3>
+        <span class="modal-close" onclick="closeAirVolumeReport()">&times;</span>
+      </div>
+      <div class="modal-body" id="airVolumeReportContent"></div>
+    </div>
+  </div>
+
+  <!-- Модальное окно экспорта PDF -->
+  <div id="pdfExportModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Экспорт в PDF</h3>
+        <span class="close" onclick="closePdfExportModal()">&times;</span>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="pdfQuality">Качество (масштаб):</label>
+          <select id="pdfQuality" class="form-control">
+            <option value="1">Низкое (1x)</option>
+            <option value="2" selected>Среднее (2x)</option>
+            <option value="3">Высокое (3x)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="pdfFormat">Формат бумаги:</label>
+          <select id="pdfFormat" class="form-control">
+            <option value="A4">A4 (210×297 мм)</option>
+            <option value="A3">A3 (297×420 мм)</option>
+            <option value="original">Оригинальный размер</option>
+          </select>
+        </div>
+        <div class="form-group form-check">
+          <input type="checkbox" id="includeGrid" class="form-check-input" checked>
+          <label for="includeGrid" class="form-check-label">Включить сетку</label>
+        </div>
+        <div class="form-group form-check">
+          <input type="checkbox" id="includeAirVolumeText" class="form-check-input" checked>
+          <label for="includeAirVolumeText" class="form-check-label">Включить тексты объемов воздуха</label>
+        </div>
+        <div class="form-group form-check">
+          <input type="checkbox" id="addMetadata" class="form-check-input" checked>
+          <label for="addMetadata" class="form-check-label">Добавить метаданные</label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" onclick="startPdfExport()">Экспортировать</button>
+        <button type="button" class="btn btn-secondary" onclick="closePdfExportModal()">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Контекстное меню -->
+  <div id="contextMenu" class="context-menu">
+    <div class="context-menu-item" onclick="deleteObject()">Удалить</div>
+    <div class="context-menu-item" onclick="duplicateObject()">Дублировать</div>
+    <div class="context-menu-item" onclick="bringObjectToFront()">На передний план</div>
+    <div class="context-menu-item" onclick="sendObjectToBack()">На задний план</div>
+  </div>
+
+  <!-- Контейнер для уведомлений -->
+  <div id="notificationContainer"></div>
+
+  <!-- Модули проекта (порядок загрузки важен!) -->
+  <script src="js-for-index4/uiTheme.js"></script>
+  <script src="js-for-index4/config.js"></script>
+  <script src="js-for-index4/utils.js"></script>
+  <script src="js-for-index4/airModel.js"></script>
+  <script src="js-for-index4/lineModel.js"></script>
+  <script src="js-for-index4/geometry.js"></script>
+  <script src="js-for-index4/cache.js"></script>
+  <script src="js-for-index4/networkBuilder.js"></script>
+  <script src="js-for-index4/airSolver.js"></script>
+  <script src="js-for-index4/visualization.js"></script>
+  <script src="js-for-index4/chainAnalysis.js"></script>
+  <script src="js-for-index4/intersections.js"></script>
+  <script src="js-for-index4/undoRedo.js"></script>
+  <script src="js-for-index4/contextMenu.js"></script>
+  <script src="js-for-index4/layersManager.js"></script>
+  <script src="js-for-index4/imageManager.js"></script>
+  <script src="js-for-index4/modals.js"></script>
+  <script src="js-for-index4/propertyPanel.js"></script>
+  <script src="js-for-index4/canvasSetup.js"></script>
+  <script src="js-for-index4/keyboard.js"></script>
+  <script src="js-for-index4/uiTabs.js"></script>
+  <script src="js-for-index4/main5.js"></script>
+  <script src="js-for-index4/projectManager.js"></script>
+  <script src="js-for-index4/csvExport.js"></script>
+  <script src="js-for-index4/pdfExport.js"></script>
+  <script src="js-for-index4/testExport.js"></script>
+</body>
+
+</html>

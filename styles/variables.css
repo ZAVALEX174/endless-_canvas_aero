@@ -1,0 +1,114 @@
+/* variables.css — CSS Custom Properties (Design Tokens) */
+
+/* === Тёмная тема (по умолчанию) === */
+:root,
+[data-theme="dark"] {
+  --color-canvas: #12131A;
+  --color-panel: #15161F;
+  --color-card: #1A1B26;
+  --color-hover: #252636;
+  --color-border: #2A2B3A;
+  --color-border-light: #1E1F2E;
+
+  --color-accent: #4F9AFF;
+  --color-accent-bg: #1D2B4A;
+
+  --color-airflow: #3DD68C;
+  --color-airflow-bg: #0F1A14;
+  --color-fan: #F0A500;
+  --color-fan-bg: #1A1305;
+  --color-fire: #E85454;
+  --color-fire-bg: #1A0A0A;
+
+  --color-text-primary: #E8E9F5;
+  --color-text-secondary: #A0A0C0;
+  --color-text-muted: #6A6B8A;
+
+  --color-grid: #1E1F2E;
+
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+
+  /* Canvas JS colors (read by uiTheme.js) */
+  --canvas-bg: #12131A;
+  --canvas-grid: rgba(30,31,46,0.8);
+  --canvas-selection: rgba(79,154,255,0.15);
+  --canvas-selection-border: #4F9AFF;
+  --canvas-text-fill: #E8E9F5;
+  --canvas-text-bg: rgba(18,19,26,0.85);
+  --image-shadow-color: rgba(255,255,255,0.45);
+}
+
+/* === Светлая тема === */
+[data-theme="light"] {
+  --color-canvas: #F0F1F5;
+  --color-panel: #FFFFFF;
+  --color-header: #E6E7ED;
+  --color-context-bar: #EFF0F4;
+  --color-card: #F7F8FA;
+  --color-hover: #E8EAF0;
+  --color-border: #C4C6D2;
+  --color-border-light: #D4D6E0;
+  --color-context-sep: #A8ABB8;
+
+  --color-accent: #2B6FE8;
+  --color-accent-bg: #E8F0FE;
+
+  --color-airflow: #1A9F5C;
+  --color-airflow-bg: #E6F7EF;
+  --color-fan: #C88500;
+  --color-fan-bg: #FFF7E0;
+  --color-fire: #D03030;
+  --color-fire-bg: #FDE8E8;
+
+  --color-text-primary: #1A1C24;
+  --color-text-secondary: #4A4D5E;
+  --color-text-muted: #8A8DA0;
+
+  --color-grid: #E2E4EC;
+
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.12);
+
+  --canvas-bg: #FFFFFF;
+  --canvas-grid: rgba(210,214,226,0.6);
+  --canvas-selection: rgba(43,111,232,0.15);
+  --canvas-selection-border: #2B6FE8;
+  --canvas-text-fill: #1A1C24;
+  --canvas-text-bg: rgba(255,255,255,0.6);
+  --image-shadow-color: rgba(0,0,0,0.15);
+}
+
+/* === Общие токены (не зависят от темы) === */
+:root {
+  --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-size-xs: 9px;
+  --font-size-sm: 10px;
+  --font-size-base: 11px;
+  --font-size-md: 13px;
+  --font-size-lg: 14px;
+
+  --radius-sm: 4px;
+  --radius-md: 5px;
+  --radius-lg: 6px;
+  --radius-xl: 8px;
+
+  --header-height: 40px;
+  --toolbar-width: 52px;
+  --context-bar-height: 38px;
+  --properties-width: 48px;          /* только рейл с иконками */
+  --properties-drawer-width: 340px;  /* ширина выдвижной панели */
+  --statusbar-height: 24px;
+
+  --btn-height-sm: 26px;
+  --btn-height-md: 32px;
+  --icon-size: 18px;
+  --icon-container: 36px;
+
+  --transition-fast: 120ms ease;
+  --transition-base: 150ms ease;
+  --transition-slow: 200ms ease-out;
+  --transition-modal: 180ms ease-out;
+}

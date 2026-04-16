@@ -1,0 +1,36 @@
+# Зависимости
+node_modules/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Claude Code
+.claude/
+
+# Временные и декодированные данные
+_vnet_decoded.json
+test-data*.json
+
+# Сгенерированные PDF (можно пересоздать скриптами)
+*.pdf
+
+# Python-скрипты генерации PDF (служебные)
+make_*_pdf.py
+
+# Документы с замечаниями (не код)
+*.docx
+zamech_extracted.txt
+
+# Системные файлы
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Автосохранения и бэкапы
+*.bak
+*.tmp
+*~
