@@ -79,6 +79,14 @@ const defaultImages = [
     contaminant: false
   },
   {
+    id: 'ochag_pozara',
+    name: 'Очаг пожара',
+    icon: '🔥',
+    path: './img/ochag_pozara.png',
+    type: 'fire',
+    contaminant: true
+  },
+  {
     id: 'valve',
     name: 'Дверь Закрытая',
     icon: '🔧',
