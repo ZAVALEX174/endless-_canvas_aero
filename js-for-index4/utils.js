@@ -59,6 +59,29 @@
     return rx + '_' + ry;
   }
 
+  // Экранирование HTML для безопасной вставки user-controlled данных в innerHTML.
+  // Покрывает: < > & " ' — остальные символы безопасны в HTML-контексте.
+  function escapeHtml(value) {
+    if (value === null || value === undefined) return '';
+    return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  // Фильтр URL для атрибута src: блокирует javascript:/vbscript:/data:text/html и т.п.
+  // Возвращает пустую строку для опасных схем — браузер не сделает запрос.
+  function safeAssetUrl(url) {
+    if (!url) return '';
+    var s = String(url).trim();
+    if (/^javascript:/i.test(s)) return '';
+    if (/^vbscript:/i.test(s)) return '';
+    if (/^data:(?!image\/)/i.test(s)) return '';
+    return s;
+  }
+
   // Экспорт
   global.roundTo5 = roundTo5;
   global.formatTo5 = formatTo5;
@@ -66,4 +89,6 @@
   global.throttle = throttle;
   global.showNotification = showNotification;
   global.getPointKey = getPointKey;
+  global.escapeHtml = escapeHtml;
+  global.safeAssetUrl = safeAssetUrl;
 })(window);

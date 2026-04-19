@@ -73,18 +73,24 @@
       tr.setAttribute('data-id', exc.id);
       tr.onclick = (function(id) { return function() { openExcModal(id); }; })(exc.id);
 
+      var idNum = Number(exc.id) || 0;
+      var safeName = window.escapeHtml ? window.escapeHtml(exc.name || '—') : (exc.name || '—');
+      var typeLabel = window.escapeHtml
+        ? window.escapeHtml(Calc.EXCAVATION_TYPES[exc.type] || exc.type || '—')
+        : (Calc.EXCAVATION_TYPES[exc.type] || exc.type || '—');
+      var areaNum = Number(exc.area) || 0;
       tr.innerHTML =
-        '<td>' + exc.id + '</td>' +
-        '<td>' + (exc.name || '—') + '</td>' +
-        '<td>' + (Calc.EXCAVATION_TYPES[exc.type] || exc.type || '—') + '</td>' +
-        '<td>' + (exc.area || 0) + '</td>' +
+        '<td>' + idNum + '</td>' +
+        '<td>' + safeName + '</td>' +
+        '<td>' + typeLabel + '</td>' +
+        '<td>' + areaNum + '</td>' +
         '<td>' + fmt(f.Qgas) + '</td>' +
         '<td>' + fmt(f.Qvv) + '</td>' +
         '<td>' + fmt(f.Qdvs) + '</td>' +
         '<td>' + fmt(f.Qv) + '</td>' +
         '<td>' + fmt(f.Ql) + '</td>' +
         '<td class="accepted-col">' + fmt(exc.Qaccepted) + '</td>' +
-        '<td><button class="btn-del" onclick="event.stopPropagation(); AirDemandUI.removeExcavation(' + exc.id + ')">&#10005;</button></td>';
+        '<td><button class="btn-del" onclick="event.stopPropagation(); AirDemandUI.removeExcavation(' + idNum + ')">&#10005;</button></td>';
       tbody.appendChild(tr);
     }
 

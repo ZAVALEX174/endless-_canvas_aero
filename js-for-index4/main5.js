@@ -345,7 +345,7 @@ window.compareNormalVsReverse = function() {
     const dQ = ((r.flow || 0) - (s.flow || 0));
     const dqColor = Math.abs(dQ) > 0.01 ? (dQ > 0 ? 'color:#2a7' : 'color:#c44') : '';
     html += `<tr>`;
-    html += `<td>${s.name || r.name || '-'}</td>`;
+    html += `<td>${escapeHtml(s.name || r.name || '-')}</td>`;
     html += `<td>${formatTo5(s.flow || 0)}</td><td>${formatTo5(s.velocity || 0)}</td><td>${formatTo5(s.depression || 0)}</td>`;
     html += `<td>${formatTo5(r.flow || 0)}</td><td>${formatTo5(r.velocity || 0)}</td><td>${formatTo5(r.depression || 0)}</td>`;
     html += `<td style="${dqColor}">${dQ >= 0 ? '+' : ''}${formatTo5(dQ)}</td>`;

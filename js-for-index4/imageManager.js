@@ -60,7 +60,8 @@ const defaultImages = [
     name: 'Датчик пожарный',
     icon: '🔥',
     path: './img/fire.png',
-    type: 'fire'
+    type: 'fire',
+    contaminant: false
   },
   {
     id: 'fire2',
@@ -74,7 +75,8 @@ const defaultImages = [
     name: 'Пожарный склад',
     icon: '🔥',
     path: './img/scladprotivopozar.png',
-    type: 'fire'
+    type: 'fire',
+    contaminant: false
   },
   {
     id: 'valve',
@@ -158,28 +160,32 @@ const defaultImages = [
     name: 'Насос погружной',
     icon: '⚙️',
     path: './img/nanospogruznoi.png',
-    type: 'pump'
+    type: 'pump',
+    contaminant: true
   },
   {
     id: 'pump2',
     name: 'Насосная станция',
     icon: '⚙️',
     path: './img/nasosnayastancia.png',
-    type: 'pump'
+    type: 'pump',
+    contaminant: true
   },
   {
     id: 'sensor',
     name: 'Самоходное оборудование',
     icon: '📡',
     path: './img/samohodnoe.png',
-    type: 'sensor'
+    type: 'sensor',
+    contaminant: true
   },
   {
     id: 'sensor2',
     name: 'Люди',
     icon: '📡',
     path: './img/people.png',
-    type: 'sensor'
+    type: 'sensor',
+    contaminant: true
   },
   {
     id: 'sensor3',
@@ -193,14 +199,16 @@ const defaultImages = [
     name: 'Взрывные работы',
     icon: '📡',
     path: './img/vzrivnieraboti.png',
-    type: 'sensor'
+    type: 'sensor',
+    contaminant: true
   },
   {
     id: 'sensor5',
     name: 'Массовые взрывные работы',
     icon: '📡',
     path: './img/massovievzivniepaboti.png',
-    type: 'sensor'
+    type: 'sensor',
+    contaminant: true
   },
   {
     id: 'sensor6',
@@ -233,7 +241,9 @@ function buildImageGrid(containerId, images) {
   for (let img of images) {
     const btn = document.createElement('button');
     btn.className = 'image-item';
-    btn.innerHTML = `<img src="${resolveAssetUrl(img.path)}" alt="${img.name}"><div>${img.name}</div>`;
+    const safeSrc = escapeHtml(safeAssetUrl(resolveAssetUrl(img.path)));
+    const safeName = escapeHtml(img.name);
+    btn.innerHTML = `<img src="${safeSrc}" alt="${safeName}"><div>${safeName}</div>`;
     btn.onclick = function () { activateImagePlacementMode(img); };
     grid.appendChild(btn);
   }
@@ -258,7 +268,9 @@ function updateImageLibrary() {
     for (let img of allImages) {
       const btn = document.createElement('button');
       btn.className = 'image-item';
-      btn.innerHTML = `<img src="${resolveAssetUrl(img.path)}" alt="${img.name}"><div>${img.name}</div>`;
+      const safeSrc = escapeHtml(safeAssetUrl(resolveAssetUrl(img.path)));
+      const safeName = escapeHtml(img.name);
+      btn.innerHTML = `<img src="${safeSrc}" alt="${safeName}"><div>${safeName}</div>`;
       btn.onclick = function () { activateImagePlacementMode(img); };
       oldGrid.appendChild(btn);
     }
@@ -315,7 +327,8 @@ function addImageAtPosition(x, y) {
         atmosphereHeight: selectedImageData.type === 'atmosphere' ? 0 : undefined,
         atmosphereTemp1: selectedImageData.type === 'atmosphere' ? 0 : undefined,
         atmosphereTemp2: selectedImageData.type === 'atmosphere' ? 0 : undefined,
-        atmosphereSign: selectedImageData.type === 'atmosphere' ? 1 : undefined
+        atmosphereSign: selectedImageData.type === 'atmosphere' ? 1 : undefined,
+        isContaminant: typeof selectedImageData.contaminant === 'boolean' ? selectedImageData.contaminant : undefined
       })
     });
     if (typeof applyLayerColorToObject === 'function') applyLayerColorToObject(img);

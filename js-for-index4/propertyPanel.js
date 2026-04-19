@@ -9,16 +9,16 @@ function updatePropertiesPanel() {
     return;
   }
 
-  let html = `<div class="property-group"><h4>Основные</h4><div class="property-row"><div class="property-label">Тип:</div><div class="property-value">${active.type}</div></div>`;
+  let html = `<div class="property-group"><h4>Основные</h4><div class="property-row"><div class="property-label">Тип:</div><div class="property-value">${escapeHtml(active.type)}</div></div>`;
 
   if (active.type === 'line') {
     normalizeLineProperties(active);
     const p = active.properties || {};
-    html += `<div class="property-row"><div class="property-label">Название:</div><div class="property-value">${p.name || '—'}</div></div>`;
+    html += `<div class="property-row"><div class="property-label">Название:</div><div class="property-value">${escapeHtml(p.name || '—')}</div></div>`;
     html += `<div class="property-row"><div class="property-label">L:</div><div class="property-value">${formatTo5(p.passageLength || 0)} м</div></div>`;
     html += `<div class="property-row"><div class="property-label">S:</div><div class="property-value">${formatTo5(p.crossSectionalArea || 0)} м²</div></div>`;
-    html += `<div class="property-row"><div class="property-label">Тип сечения:</div><div class="property-value">${p.sectionType || AIR_MODEL_CONFIG.DEFAULT_SECTION}</div></div>`;
-    html += `<div class="property-row"><div class="property-label">Тип крепи:</div><div class="property-value">${p.supportType || AIR_MODEL_CONFIG.DEFAULT_SUPPORT}</div></div>`;
+    html += `<div class="property-row"><div class="property-label">Тип сечения:</div><div class="property-value">${escapeHtml(p.sectionType || AIR_MODEL_CONFIG.DEFAULT_SECTION)}</div></div>`;
+    html += `<div class="property-row"><div class="property-label">Тип крепи:</div><div class="property-value">${escapeHtml(p.supportType || AIR_MODEL_CONFIG.DEFAULT_SUPPORT)}</div></div>`;
     html += `<div class="property-row"><div class="property-label">k:</div><div class="property-value">${formatTo5(p.roughnessCoefficient || 0)} Н·с²/м⁴</div></div>`;
     html += `<div class="property-row"><div class="property-label">P:</div><div class="property-value">${formatTo5(p.perimeter || 0)} м</div></div>`;
     html += `<div class="property-row"><div class="property-label">x = L×P/S:</div><div class="property-value">${formatTo5(p.xFactor || 0)}</div></div>`;
@@ -29,10 +29,10 @@ function updatePropertiesPanel() {
     html += `<div class="property-row"><div class="property-label">Q:</div><div class="property-value">${formatTo5(p.airVolume || 0)} м³/с</div></div>`;
     html += `<div class="property-row"><div class="property-label">v:</div><div class="property-value">${formatTo5(p.velocity || 0)} м/с</div></div>`;
     html += `<div class="property-row"><div class="property-label">h:</div><div class="property-value">${formatTo5(p.depression || 0)} Па</div></div>`;
-    html += `<div class="property-row"><div class="property-label">Узел начала:</div><div class="property-value">${p.startNode || '—'}</div></div>`;
-    html += `<div class="property-row"><div class="property-label">Узел конца:</div><div class="property-value">${p.endNode || '—'}</div></div>`;
+    html += `<div class="property-row"><div class="property-label">Узел начала:</div><div class="property-value">${escapeHtml(p.startNode || '—')}</div></div>`;
+    html += `<div class="property-row"><div class="property-label">Узел конца:</div><div class="property-value">${escapeHtml(p.endNode || '—')}</div></div>`;
     if (p.attachedObjects) {
-      html += `<div class="property-row"><div class="property-label">Объекты на ветви:</div><div class="property-value">${p.attachedObjects}</div></div>`;
+      html += `<div class="property-row"><div class="property-label">Объекты на ветви:</div><div class="property-value">${escapeHtml(p.attachedObjects)}</div></div>`;
     }
     if (p.branchTotalResistance !== undefined) {
       html += `<div class="property-row"><div class="property-label">R ветви:</div><div class="property-value">${formatTo5(p.branchTotalResistance || 0)}</div></div>`;
@@ -40,15 +40,15 @@ function updatePropertiesPanel() {
     }
   } else if (active.type === 'image') {
     const p = synchronizeObjectDerivedProperties(active.properties || {});
-    html += `<div class="property-row"><div class="property-label">Название:</div><div class="property-value">${p.name || 'Объект'}</div></div>`;
-    html += `<div class="property-row"><div class="property-label">Тип объекта:</div><div class="property-value">${p.type || 'default'}</div></div>`;
+    html += `<div class="property-row"><div class="property-label">Название:</div><div class="property-value">${escapeHtml(p.name || 'Объект')}</div></div>`;
+    html += `<div class="property-row"><div class="property-label">Тип объекта:</div><div class="property-value">${escapeHtml(p.type || 'default')}</div></div>`;
     if (p.type === 'fan') {
       html += `<div class="property-row"><div class="property-label">Режим:</div><div class="property-value">Подача</div></div>`;
       html += `<div class="property-row"><div class="property-label">Q0:</div><div class="property-value">${formatTo5(p.airVolume || 0)} м³/с</div></div>`;
       html += `<div class="property-row"><div class="property-label">Начало подачи:</div><div class="property-value">${p.isFlowSource !== false ? '✦ Да (источник)' : '— Нет'}</div></div>`;
     } else if (p.type === 'valve') {
       const modeText = p.doorMode === 'closed' ? 'Дверь закрыта' : p.doorMode === 'window' ? `Дверь с вентокном ${p.windowArea} м²` : 'Дверь открыта';
-      html += `<div class="property-row"><div class="property-label">Режим:</div><div class="property-value">${modeText}</div></div>`;
+      html += `<div class="property-row"><div class="property-label">Режим:</div><div class="property-value">${escapeHtml(modeText)}</div></div>`;
       html += `<div class="property-row"><div class="property-label">Robj:</div><div class="property-value">${formatTo5(p.airResistance || 0)}</div></div>`;
     } else if (isAtmosphereObject(p)) {
       html += `<div class="property-row"><div class="property-label">H:</div><div class="property-value">${formatTo5(p.atmosphereHeight || 0)} м</div></div>`;

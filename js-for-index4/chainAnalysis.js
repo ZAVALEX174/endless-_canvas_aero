@@ -79,7 +79,7 @@ function analyzeNetworkNodes(showModal = false) {
   });
 
   if (showModal) {
-    createModal('nodeAnalysisModal', 'Анализ узлов', `<pre>${report}</pre>`);
+    createModal('nodeAnalysisModal', 'Анализ узлов', `<pre>${escapeHtml(report)}</pre>`);
   }
   return report;
 }
@@ -186,7 +186,7 @@ function showAirVolumeReport() {
   html += '<div style="overflow:auto;"><table style="width:100%; border-collapse:collapse; font-size:12px;">';
   html += '<tr><th>Название</th><th>L</th><th>S</th><th>R</th><th>Robj</th><th>Rполн</th><th>Q</th><th>v</th><th>h</th></tr>';
   rows.forEach(row => {
-    html += `<tr><td>${row.name}</td><td>${formatTo5(row.length)}</td><td>${formatTo5(row.area)}</td><td>${formatTo5(row.resistance)}</td><td>${formatTo5(row.objectResistance)}</td><td>${formatTo5(row.totalResistance)}</td><td>${formatTo5(row.flow)}</td><td>${formatTo5(row.velocity)}</td><td>${formatTo5(row.depression)}</td></tr>`;
+    html += `<tr><td>${escapeHtml(row.name)}</td><td>${formatTo5(row.length)}</td><td>${formatTo5(row.area)}</td><td>${formatTo5(row.resistance)}</td><td>${formatTo5(row.objectResistance)}</td><td>${formatTo5(row.totalResistance)}</td><td>${formatTo5(row.flow)}</td><td>${formatTo5(row.velocity)}</td><td>${formatTo5(row.depression)}</td></tr>`;
   });
   html += '</table></div></div>';
   createModal('airVolumeReportModal', 'Отчёт по воздуху', html, [

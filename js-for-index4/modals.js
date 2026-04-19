@@ -38,11 +38,11 @@ function showIntersectionPointInfoModal(pointData) {
   html += `<p><strong>Линий в точке:</strong> ${pointData.linesInPoint.length}</p>`;
   for (let i = 0; i < pointData.linesInPoint.length; i++) {
     const l = pointData.linesInPoint[i];
-    html += `<p>${i + 1}. ${l.name} — ${l.isStart ? 'начало' : l.isEnd ? 'конец' : 'на линии'} (Q=${l.airVolume.toFixed(3)})</p>`;
+    html += `<p>${i + 1}. ${escapeHtml(l.name)} — ${l.isStart ? 'начало' : l.isEnd ? 'конец' : 'на линии'} (Q=${l.airVolume.toFixed(3)})</p>`;
   }
   html += `<p><strong>Объектов:</strong> ${pointData.objectsInPoint.length}</p>`;
   for (let o of pointData.objectsInPoint) {
-    html += `<p>${o.name} (Q=${o.airVolume}, R=${o.airResistance})</p>`;
+    html += `<p>${escapeHtml(o.name)} (Q=${escapeHtml(o.airVolume)}, R=${escapeHtml(o.airResistance)})</p>`;
   }
   createModal('intersectionPointModal', 'Информация о точке', html);
 }

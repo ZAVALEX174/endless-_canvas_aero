@@ -50,15 +50,20 @@
     return (props.type || '').toLowerCase() === 'fire';
   }
 
-  // Объект-загрязнитель для цветовой визуализации струи (#15-16):
-  // - любой пожар (fire) — всегда загрязнитель;
-  // - объект с явным флагом properties.isContaminant === true — для ручной
-  //   пометки источников пыли, газа, метана и т.д. (будущее расширение UI);
-  // - НЕ считаем загрязнителями двери, атмосферу, вентиляторы, потребителей.
+  // Объект-загрязнитель для цветовой визуализации струи (#15-16).
+  // Приоритет правил:
+  //   1. properties.isContaminant === true  → загрязнитель (явно включён)
+  //   2. properties.isContaminant === false → НЕ загрязнитель (явно выключен,
+  //      напр. Датчик пожарный, Пожарный склад — не эмитируют загрязнение)
+  //   3. Иначе — fallback на тип 'fire' (обратная совместимость со старыми
+  //      сохранениями, где флага ещё не было).
+  // Загрязнители по каталогу (imageManager.js): Пожарный гидрант (fire2),
+  // насосы (pump/pump2), самоходное оборудование, люди, взрывные работы.
   function isContaminantObject(props) {
     props = props || {};
-    if (isFireObject(props)) return true;
     if (props.isContaminant === true) return true;
+    if (props.isContaminant === false) return false;
+    if (isFireObject(props)) return true;
     return false;
   }
 
