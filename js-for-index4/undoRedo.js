@@ -12,6 +12,19 @@ function saveToUndoStack() {
   if (typeof debouncedAutoSave === 'function') debouncedAutoSave();
 }
 
+function _resetVisualStateAfterUndoRedo() {
+  // Сброс расчёта и визуализаций после Undo/Redo:
+  // загрузка из JSON может оставить «тени» прошлого расчёта — поэтому
+  // сбрасываем подкраски (smoke, flow), маркеры висящих концов и
+  // приводим тексты воздуха к свежему состоянию.
+  if (typeof clearSmokeVisualization === 'function') clearSmokeVisualization();
+  if (typeof clearFlowColoring === 'function') clearFlowColoring();
+  if (typeof clearDanglingMarkers === 'function') clearDanglingMarkers();
+  if (typeof resetCalculation === 'function') {
+    try { resetCalculation(); } catch (e) { /* безопасно — продолжаем */ }
+  }
+}
+
 function undoAction() {
   if (undoStack.length < 2) return;
   const current = undoStack.pop();
@@ -20,6 +33,7 @@ function undoAction() {
   canvas.loadFromJSON(prev, () => {
     invalidateCache();
     updateConnectionGraph();
+    _resetVisualStateAfterUndoRedo();
     updateAllAirVolumeTexts();
     canvas.renderAll();
     updatePropertiesPanel();
@@ -34,6 +48,7 @@ function redoAction() {
   canvas.loadFromJSON(next, () => {
     invalidateCache();
     updateConnectionGraph();
+    _resetVisualStateAfterUndoRedo();
     updateAllAirVolumeTexts();
     canvas.renderAll();
     updatePropertiesPanel();

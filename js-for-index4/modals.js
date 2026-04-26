@@ -34,6 +34,11 @@ function createModal(id, title, content, footerButtons = []) {
 }
 
 function showIntersectionPointInfoModal(pointData) {
+  // Удаляем старый модал, чтобы обновился footer (createModal при существующем
+  // элементе обновляет только тело — но нам нужен свежий набор кнопок).
+  const oldModal = document.getElementById('intersectionPointModal');
+  if (oldModal) oldModal.remove();
+
   let html = `<p><strong>Координаты:</strong> (${pointData.x.toFixed(1)}, ${pointData.y.toFixed(1)})</p>`;
   html += `<p><strong>Линий в точке:</strong> ${pointData.linesInPoint.length}</p>`;
   for (let i = 0; i < pointData.linesInPoint.length; i++) {
@@ -44,7 +49,31 @@ function showIntersectionPointInfoModal(pointData) {
   for (let o of pointData.objectsInPoint) {
     html += `<p>${escapeHtml(o.name)} (Q=${escapeHtml(o.airVolume)}, R=${escapeHtml(o.airResistance)})</p>`;
   }
-  createModal('intersectionPointModal', 'Информация о точке', html);
+
+  // п.5: Если точка — тупик (степень = 1, единственная линия заканчивается здесь),
+  // добавляем кнопку запечатать/открыть. Раньше это было только через ПКМ-меню.
+  const footerButtons = [];
+  const degreeAtPoint = (pointData.linesStarting || 0) + (pointData.linesEnding || 0);
+  if (degreeAtPoint === 1 && pointData.linesInPoint.length === 1) {
+    const firstLine = pointData.linesInPoint[0].line;
+    const lid = (firstLine && firstLine.properties && firstLine.properties.layerId) || 'default';
+    const ck = typeof getCalcNodeKey === 'function' ? getCalcNodeKey : getPointKey;
+    const nodeKey = (typeof getCalcNodeKey === 'function')
+      ? ck(pointData.x, pointData.y, lid)
+      : getPointKey(pointData.x, pointData.y);
+    const isSealed = !!(window.sealedNodes && window.sealedNodes.has(nodeKey));
+    html += `<p><em>Состояние тупика: ${isSealed ? 'запечатан (глухой)' : 'открыт (связь с атмосферой)'}</em></p>`;
+    // Сохраняем nodeKey в глобальной переменной — иначе при инлайн-onClick
+    // надо экранировать кавычки и спецсимволы; так проще и безопаснее.
+    window._pendingSealNodeKeyFromModal = nodeKey;
+    footerButtons.push({
+      text: isSealed ? 'Открыть тупик (атмосфера)' : 'Запечатать тупик (глухой)',
+      class: 'btn-primary',
+      onClick: "toggleSealedNode(window._pendingSealNodeKeyFromModal); document.getElementById('intersectionPointModal').style.display='none';"
+    });
+  }
+
+  createModal('intersectionPointModal', 'Информация о точке', html, footerButtons);
 }
 
 function updateLineModalDerivedValues() {
@@ -507,7 +536,12 @@ function applyObjectProperties() {
     layerId: document.getElementById('objPropertyLayer')?.value || 'default',
     status: document.getElementById('objPropertyStatus')?.value || '',
     type: objectType,
-    airVolume: roundTo5(parseFloat(document.getElementById('objAirVolume').value) || 0),
+    // п.17: для вентилятора airVolume — это МОДУЛЬ расхода. Знак берётся
+    // из fanMode (supply=+, reverse=-) в getObjectSupplyContribution.
+    // Math.abs страхует случаи вставки/импорта отрицательных значений.
+    airVolume: (objectType === 'fan')
+      ? Math.abs(roundTo5(parseFloat(document.getElementById('objAirVolume').value) || 0))
+      : roundTo5(parseFloat(document.getElementById('objAirVolume').value) || 0),
     airResistance: roundTo5(parseFloat(document.getElementById('objAirResistance').value) || 0),
     fanMode: document.getElementById('objFanMode').value,
     isFlowSource: objectType === 'fan'
@@ -538,10 +572,24 @@ function applyObjectProperties() {
   });
   if (typeof applyLayerColorToObject === 'function') applyLayerColorToObject(currentEditingObject);
   invalidateCache();
+
+  // Если изменился вентилятор (fanMode/isFlowSource/airVolume) — пересчитать сеть
+  // автоматически, чтобы стрелки и расходы соответствовали новому режиму.
+  const _isFan = (newProps.type === 'fan');
+  const _fanModeChanged = _isFan && (
+    (old.fanMode || 'supply') !== (newProps.fanMode || 'supply') ||
+    (old.isFlowSource !== newProps.isFlowSource) ||
+    (parseFloat(old.airVolume) || 0) !== (parseFloat(newProps.airVolume) || 0)
+  );
+
   canvas.renderAll();
   updatePropertiesPanel();
   closeObjectPropertiesModal();
   showNotification('Свойства объекта обновлены', 'success');
+
+  if (_fanModeChanged && typeof calculateAirFlowsSafe === 'function') {
+    setTimeout(() => calculateAirFlowsSafe(), 50);
+  }
 }
 
 function deleteCurrentObject() {

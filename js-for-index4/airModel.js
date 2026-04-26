@@ -77,7 +77,10 @@
     if (isFanObject(props)) {
       const isSource = props.isFlowSource !== false;
       if (!isSource) return 0;
-      const vol = roundTo5(parseFloat(props.airVolume) || 0);
+      // п.17: airVolume для вентилятора — модуль расхода; знак идёт ТОЛЬКО
+      // из fanMode (supply=+, reverse=-). Math.abs страхует от легаси-данных
+      // с «двойной отрицательностью» (Q=-100 + fanMode=reverse → давало бы +100).
+      const vol = Math.abs(roundTo5(parseFloat(props.airVolume) || 0));
       return (props.fanMode === 'reverse') ? -vol : vol;
     }
     return roundTo5(parseFloat(props.sourceAirVolume) || 0);

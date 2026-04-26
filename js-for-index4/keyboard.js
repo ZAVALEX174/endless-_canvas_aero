@@ -61,6 +61,10 @@ function setupKeyboardShortcuts() {
           updatePropertiesPanel();
           if (typeof invalidateCache === 'function') invalidateCache();
           if (typeof updateConnectionGraph === 'function') updateConnectionGraph();
+          // Авто-пересчёт после массового удаления
+          if (typeof calculateAirFlowsSafe === 'function') {
+            setTimeout(() => calculateAirFlowsSafe(), 80);
+          }
           return;
         }
         if (active.type === 'line' && !e.shiftKey) {
@@ -79,6 +83,10 @@ function setupKeyboardShortcuts() {
         canvas.remove(active);
         canvas.renderAll();
         updatePropertiesPanel();
+        // Авто-пересчёт после одиночного удаления (линия / объект)
+        if (typeof calculateAirFlowsSafe === 'function') {
+          setTimeout(() => calculateAirFlowsSafe(), 80);
+        }
       }
     }
     if (e.ctrlKey) {

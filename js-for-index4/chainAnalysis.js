@@ -198,6 +198,203 @@ function showAirVolumeReport() {
   ]);
 }
 
+// Найти кандидатов для объединения в одном слое:
+// промежуточные узлы степени 2, без объектов, с коллинеарными сегментами
+// и совпадающими гидравлическими свойствами.
+function _findMergeCandidates(layerId) {
+  const lines = getCachedLines().filter(l =>
+    (l.properties && l.properties.layerId || 'default') === layerId
+  );
+  const images = getCachedImages().filter(i =>
+    (i.properties && i.properties.layerId || 'default') === layerId
+  );
+
+  // Карта nodeKey → массив { line, end: 'start'|'end', ep }
+  const nodeMap = new Map();
+  lines.forEach(line => {
+    const ep = getLineAbsoluteEndpoints(line);
+    const k1 = getPointKey(ep.x1, ep.y1);
+    const k2 = getPointKey(ep.x2, ep.y2);
+    if (!nodeMap.has(k1)) nodeMap.set(k1, []);
+    if (!nodeMap.has(k2)) nodeMap.set(k2, []);
+    nodeMap.get(k1).push({ line, end: 'start', ep, x: ep.x1, y: ep.y1 });
+    nodeMap.get(k2).push({ line, end: 'end', ep, x: ep.x2, y: ep.y2 });
+  });
+
+  const candidates = [];
+  nodeMap.forEach((items, key) => {
+    if (items.length !== 2) return;
+    const px = items[0].x, py = items[0].y;
+
+    // На узле не должно быть объекта (вентилятор/клапан/атмосфера и т.п.)
+    const hasObject = images.some(img => {
+      const c = getObjectCenter(img);
+      return Math.hypot(c.x - px, c.y - py) < 18;
+    });
+    if (hasObject) return;
+
+    // Заблокированный узел не трогаем
+    if (typeof isPointInLockedNode === 'function') {
+      const nc = isPointInLockedNode(px, py);
+      if (nc && nc.node && nc.node.locked) return;
+    }
+
+    const [a, b] = items;
+    // Внешние концы сегментов (противоположные узлу)
+    const aOuter = a.end === 'start'
+      ? { x: a.ep.x2, y: a.ep.y2 }
+      : { x: a.ep.x1, y: a.ep.y1 };
+    const bOuter = b.end === 'start'
+      ? { x: b.ep.x2, y: b.ep.y2 }
+      : { x: b.ep.x1, y: b.ep.y1 };
+    const aDx = aOuter.x - px, aDy = aOuter.y - py;
+    const bDx = bOuter.x - px, bDy = bOuter.y - py;
+    const aLen = Math.hypot(aDx, aDy);
+    const bLen = Math.hypot(bDx, bDy);
+    if (aLen < 1 || bLen < 1) return;
+    // Сегменты должны смотреть в противоположные стороны от узла:
+    // косинус угла между направлениями из узла наружу ≈ -1.
+    // Допуск ~3.6° (cos > -0.998 — отклоняем).
+    const cos = (aDx * bDx + aDy * bDy) / (aLen * bLen);
+    if (cos > -0.998) return;
+
+    // Гидравлические свойства должны совпадать — иначе объединение исказит расчёт
+    const pa = a.line.properties || {};
+    const pb = b.line.properties || {};
+    const eq = (x, y) => (parseFloat(x) || 0) === (parseFloat(y) || 0);
+    if (!eq(pa.crossSectionalArea, pb.crossSectionalArea)) return;
+    if (!eq(pa.roughnessCoefficient, pb.roughnessCoefficient)) return;
+    if ((pa.sectionType || '') !== (pb.sectionType || '')) return;
+    if ((pa.supportType || '') !== (pb.supportType || '')) return;
+
+    candidates.push({
+      lineA: a.line, lineB: b.line,
+      outerA: aOuter, outerB: bOuter,
+      nodeX: px, nodeY: py,
+      layerId
+    });
+  });
+
+  return candidates;
+}
+
+function _mergeTwoSegments(c) {
+  const pa = c.lineA.properties || {};
+  const newLength = Math.hypot(c.outerA.x - c.outerB.x, c.outerA.y - c.outerB.y);
+  const passA = parseFloat(pa.passageLength) || 0;
+  const passB = parseFloat((c.lineB.properties || {}).passageLength) || 0;
+  const bfA = parseFloat(pa.boundaryFlow) || 0;
+  const bfB = parseFloat((c.lineB.properties || {}).boundaryFlow) || 0;
+
+  const merged = {};
+  Object.assign(merged, pa);
+  merged.length = roundTo5(newLength);
+  merged.passageLength = roundTo5(passA + passB);
+  // boundaryFlow: splitLineAtPoint оставляет его только на line1 (на line2 = 0);
+  // splitAllLines копирует одинаковое значение в оба сегмента.
+  // max() корректно обрабатывает оба случая.
+  merged.boundaryFlow = roundTo5(Math.max(bfA, bfB));
+  merged.airVolume = merged.boundaryFlow;
+  merged.velocity = 0;
+  merged.depression = 0;
+  merged.localObjectResistance = 0;
+  merged.localDeltaCoefficient = 0;
+  merged.startNode = '';
+  merged.endNode = '';
+  // Имя без суффикса " (часть N)"
+  let name = pa.name || 'Линия';
+  name = name.replace(/\s*\(часть\s+\d+\)\s*$/i, '');
+  merged.name = name;
+  merged.layerId = c.layerId;
+  // Пересчёт сопротивления через каноническую функцию
+  if (typeof recalculateLineHydraulicBase === 'function') {
+    const hydra = recalculateLineHydraulicBase(merged);
+    if (hydra && typeof hydra.airResistance === 'number') {
+      merged.airResistance = roundTo5(hydra.airResistance);
+      merged.perimeter = roundTo5(hydra.perimeter || 0);
+    }
+  }
+  merged.totalResistance = merged.airResistance;
+
+  return new fabric.Line([c.outerA.x, c.outerA.y, c.outerB.x, c.outerB.y], {
+    stroke: c.lineA.stroke,
+    strokeWidth: c.lineA.strokeWidth,
+    strokeDashArray: c.lineA.strokeDashArray,
+    fill: false,
+    strokeLineCap: 'round',
+    hasControls: true,
+    hasBorders: true,
+    id: generateLineId(),
+    properties: merged
+  });
+}
+
+// Объединяет коллинеарные сегменты, разделённые в проходных узлах (степень 2,
+// без объектов и блокировок). Обратная операция к splitAllLines.
+// Работает по всем видимым слоям; внутри каждого слоя итерируется до сходимости.
+function simplifyAllLines() {
+  const allLayers = typeof getLayers === 'function' ? getLayers() : [{ id: 'default', visible: true }];
+  const targetLayerIds = allLayers
+    .filter(l => l.visible !== false)
+    .map(l => l.id);
+  if (!targetLayerIds.length) targetLayerIds.push('default');
+
+  let totalReduced = 0;
+  let savedUndo = false;
+  let safety = 200;
+
+  while (safety-- > 0) {
+    let mergedThisPass = 0;
+
+    for (const layerId of targetLayerIds) {
+      const candidates = _findMergeCandidates(layerId);
+      if (!candidates.length) continue;
+
+      const removedSet = new Set();
+      const addedList = [];
+
+      for (const c of candidates) {
+        if (removedSet.has(c.lineA) || removedSet.has(c.lineB)) continue;
+        if (!savedUndo) { saveToUndoStack(); savedUndo = true; }
+        removedSet.add(c.lineA);
+        removedSet.add(c.lineB);
+        addedList.push(_mergeTwoSegments(c));
+      }
+
+      if (addedList.length) {
+        removedSet.forEach(line => {
+          if (typeof removeAirVolumeText === 'function') removeAirVolumeText(line);
+          canvas.remove(line);
+        });
+        addedList.forEach(line => {
+          canvas.add(line);
+          if (typeof applyLayerColorToObject === 'function') applyLayerColorToObject(line);
+          if (typeof createOrUpdateAirVolumeText === 'function') createOrUpdateAirVolumeText(line);
+        });
+        if (typeof invalidateCache === 'function') invalidateCache();
+        // Каждое объединение: 2 → 1, чистое уменьшение = размер removedSet - addedList.length
+        mergedThisPass += removedSet.size - addedList.length;
+      }
+    }
+
+    if (!mergedThisPass) break;
+    totalReduced += mergedThisPass;
+  }
+
+  if (totalReduced > 0) {
+    if (typeof updateConnectionGraph === 'function') updateConnectionGraph();
+    if (typeof scheduleRender === 'function') scheduleRender();
+    showNotification(`Объединено сегментов: ${totalReduced}`, 'success');
+    // Аналогично splitAllLines (п.25): пересчитать после изменения графа,
+    // чтобы стрелки потоков и значения соответствовали новой топологии.
+    if (typeof calculateAirFlowsSafe === 'function') {
+      setTimeout(() => calculateAirFlowsSafe(), 60);
+    }
+  } else {
+    showNotification('Нет сегментов, которые можно объединить', 'info');
+  }
+}
+
 // Разделить линии по центрам объектов (изображений) на холсте
 function splitAllLinesAtObjectCenters() {
   const images = getCachedImages();
@@ -423,6 +620,7 @@ global.showAllChainsSummary = showAllChainsSummary;
 global.analyzeSelectedChain = analyzeSelectedChain;
 global.showAirVolumeReport = showAirVolumeReport;
 global.splitAllLinesAtObjectCenters = splitAllLinesAtObjectCenters;
+global.simplifyAllLines = simplifyAllLines;
 global.calculateAllPropertiesForAllLines = calculateAllPropertiesForAllLines;
 global.resetCalculation = resetCalculation;
 

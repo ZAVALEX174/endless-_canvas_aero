@@ -14,7 +14,11 @@ const ZOOM_STEP = 0.1;
 
 function updateZoomIndicator() {
   const el = document.getElementById('zoomLevel');
-  if (el) el.textContent = Math.round((canvas.getZoom() || 1) * 100) + '%';
+  if (!el) return;
+  const pct = Math.round((canvas.getZoom() || 1) * 100);
+  // Поддержка как <span> (старый UI), так и <input> (после п.19 — ручной ввод)
+  if (el.tagName === 'INPUT') el.value = pct;
+  else el.textContent = pct + '%';
 }
 
 function zoomToPoint(point, newZoom) {
@@ -35,9 +39,11 @@ function zoomOut() {
 }
 
 function zoomReset() {
+  // Включаем тексты воздуха и intersection-points в bbox — иначе после
+  // расчёта подписи оказываются за экраном (замечание п.20).
   const objs = canvas.getObjects().filter(o => o.id !== 'grid-group' && !o.isPreview &&
-    o.id !== 'intersection-point' && o.id !== 'intersection-point-label' &&
-    o.id !== 'air-volume-text' && o.id !== 'sealed-node-marker' && o.id !== 'dangling-marker');
+    o.id !== 'sealed-node-marker' && o.id !== 'dangling-marker' &&
+    o.id !== 'intersection-point-label');
   if (!objs.length) {
     canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
     drawGrid(APP_CONFIG.GRID_SIZE);
@@ -62,7 +68,8 @@ function zoomReset() {
   maxX = (maxX - vpt[4]) / z;
   maxY = (maxY - vpt[5]) / z;
 
-  const padding = 60;
+  // Паддинг увеличен (60 → 120) — тексты подписей выходят за линию
+  const padding = 120;
   const contentW = maxX - minX + padding * 2;
   const contentH = maxY - minY + padding * 2;
   const zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.min(canvas.width / contentW, canvas.height / contentH)));
@@ -233,6 +240,18 @@ function setupCanvasEvents() {
   canvas.on('selection:created', updatePropertiesPanel);
   canvas.on('selection:updated', updatePropertiesPanel);
   canvas.on('selection:cleared', updatePropertiesPanel);
+  // п.11: жёлтая подсветка линии/узла привязки при выборе объекта
+  canvas.on('selection:created', function(e) {
+    var obj = (e.selected && e.selected[0]) || canvas.getActiveObject();
+    if (typeof highlightAttachmentForObject === 'function') highlightAttachmentForObject(obj);
+  });
+  canvas.on('selection:updated', function(e) {
+    var obj = (e.selected && e.selected[0]) || canvas.getActiveObject();
+    if (typeof highlightAttachmentForObject === 'function') highlightAttachmentForObject(obj);
+  });
+  canvas.on('selection:cleared', function() {
+    if (typeof clearAttachmentHighlight === 'function') clearAttachmentHighlight();
+  });
   canvas.on('object:added', handleObjectAdded);
   canvas.on('object:modified', handleObjectModified);
   canvas.on('object:removed', handleObjectRemoved);
@@ -481,7 +500,15 @@ function handleLineDrawingEnd(e, pointer) {
   updatePropertiesPanel();
 
   if (!isContinuousLineMode) {
-    deactivateAllModes();
+    // п.21: одиночный режим — НЕ выходим из режима рисования, чтобы можно было
+    // сразу начать следующую линию (в т.ч. от только что поставленной вершины).
+    // Сбрасываем lineStartPoint, чтобы следующий клик трактовался как начало
+    // новой линии. ESC по-прежнему завершает режим (см. keyboard.js:30).
+    lineStartPoint = null;
+    if (previewLine) {
+      canvas.remove(previewLine);
+      previewLine = null;
+    }
   } else {
     lineStartPoint = { x: snappedX, y: snappedY };
     if (endFromObject) lineStartPoint.object = endFromObject.object;
@@ -592,6 +619,8 @@ function activateLineDrawing() {
   canvas.forEachObject(obj => {
     if (obj.id !== 'grid-group') obj.selectable = false;
   });
+  const lineBtn = document.getElementById('lineDrawingBtn');
+  if (lineBtn) lineBtn.classList.add('active');
   showNotification('Режим рисования линии. Клик для начала, ESC отмена.', 'info');
 }
 
@@ -607,6 +636,8 @@ function deactivateAllModes() {
   isCrossLayerMode = false;
   const clBtn = document.getElementById('crossLayerBtn');
   if (clBtn) clBtn.classList.remove('active');
+  const lineBtn = document.getElementById('lineDrawingBtn');
+  if (lineBtn) lineBtn.classList.remove('active');
   cleanupPreviewLines();
   previewLine = null;
   lineStartPoint = null;
@@ -631,7 +662,44 @@ function toggleCrossLayerMode() {
   canvas.selection = false;
   const btn = document.getElementById('crossLayerBtn');
   if (btn) btn.classList.add('active');
-  showNotification('Режим точек связи слоёв: кликните на точку пересечения линий разных слоёв. Повторный клик = убрать.', 'info');
+  // п.27: при первом включении режима показываем подробный onboarding-баннер.
+  // localStorage-флаг гарантирует одноразовость; повторно — только короткая нотификация.
+  var seenKey = 'aero_crossLayerOnboardingSeen_v1';
+  var seen = false;
+  try { seen = localStorage.getItem(seenKey) === '1'; } catch (e) { /* приватный режим — игнор */ }
+  if (!seen) {
+    _showCrossLayerOnboarding();
+    try { localStorage.setItem(seenKey, '1'); } catch (e) { /* не критично */ }
+  } else {
+    showNotification('Режим точек связи слоёв: кликните на точку пересечения линий разных слоёв. Повторный клик = убрать.', 'info');
+  }
+}
+
+function _showCrossLayerOnboarding() {
+  var existing = document.getElementById('crossLayerOnboarding');
+  if (existing) existing.remove();
+  var box = document.createElement('div');
+  box.id = 'crossLayerOnboarding';
+  box.style.cssText = [
+    'position:fixed;top:60px;left:50%;transform:translateX(-50%);',
+    'background:var(--color-surface,#1f2530);color:var(--color-text-primary,#e6e9ef);',
+    'border:1px solid var(--color-accent,#4a9eff);border-radius:8px;',
+    'padding:16px 18px;max-width:440px;font-size:13px;line-height:1.45;',
+    'box-shadow:0 4px 20px rgba(0,0,0,0.4);z-index:9999;'
+  ].join('');
+  box.innerHTML = [
+    '<div style="font-weight:600;margin-bottom:6px;color:var(--color-accent,#4a9eff);">Связь слоёв включена</div>',
+    '<div>Используется когда выработки на разных горизонтах должны быть соединены в одну сеть (вертикальные стволы, гезенки, скважины).</div>',
+    '<ol style="margin:8px 0 0 20px;padding:0;">',
+    '<li>Кликните на холст в точке, где линии разных слоёв должны соединиться — появится зелёная метка ★.</li>',
+    '<li>В этой точке расчёт будет считать узел общим для всех слоёв (без метки слои изолированы).</li>',
+    '<li>Повторный клик в той же точке снимает связь.</li>',
+    '</ol>',
+    '<div style="text-align:right;margin-top:10px;">',
+    '<button class="btn btn-primary" style="height:28px;padding:0 14px;font-size:12px;" onclick="document.getElementById(\'crossLayerOnboarding\').remove();">Понятно</button>',
+    '</div>'
+  ].join('');
+  document.body.appendChild(box);
 }
 
 function toggleContinuousMode() {
@@ -763,29 +831,37 @@ function extendSetupCanvasEvents() {
       }
       if (obj.airVolumeText) createOrUpdateAirVolumeText(obj);
     } else if (obj.id === 'intersection-point') {
-      const r = obj.radius || 6;
-      const newX = roundTo5(obj.left + r);
-      const newY = roundTo5(obj.top + r);
+      // С originX/Y='center' obj.left/top — уже центр круга
+      const newX = roundTo5(obj.left);
+      const newY = roundTo5(obj.top);
+
+      // Защита от потерянного _dragOrigX (точка пересоздана после splitAllLines):
+      // если drag начался без mousedown — берём текущую позицию как origin
+      if (obj._dragOrigX === undefined) {
+        obj._dragOrigX = newX;
+        obj._dragOrigY = newY;
+        obj._hasDragged = false;
+        obj._dragPrevX = undefined;
+        obj._dragPrevY = undefined;
+      }
 
       // Порог: не считаем перетаскиванием меньше 8px — защита от случайного клика
-      if (obj._dragOrigX !== undefined) {
-        const dist = Math.hypot(newX - roundTo5(obj._dragOrigX), newY - roundTo5(obj._dragOrigY));
-        if (dist < 8) {
-          // Сбрасываем обратно, не трогаем линии
-          obj.set({ left: obj._dragOrigX - r, top: obj._dragOrigY - r });
-          obj.setCoords();
-          return;
-        }
+      const dist = Math.hypot(newX - roundTo5(obj._dragOrigX), newY - roundTo5(obj._dragOrigY));
+      if (dist < 8) {
+        // Сбрасываем обратно, не трогаем линии
+        obj.set({ left: obj._dragOrigX, top: obj._dragOrigY });
+        obj.setCoords();
+        return;
       }
 
       obj._hasDragged = true;
       // Первый вызов: используем позицию до начала тащения (_dragOrigX), не текущую
       const oldX = obj._dragPrevX !== undefined
         ? obj._dragPrevX
-        : (obj._dragOrigX !== undefined ? roundTo5(obj._dragOrigX) : newX);
+        : roundTo5(obj._dragOrigX);
       const oldY = obj._dragPrevY !== undefined
         ? obj._dragPrevY
-        : (obj._dragOrigY !== undefined ? roundTo5(obj._dragOrigY) : newY);
+        : roundTo5(obj._dragOrigY);
       obj._dragPrevX = newX;
       obj._dragPrevY = newY;
       const key = getPointKey(oldX, oldY);
@@ -795,13 +871,22 @@ function extendSetupCanvasEvents() {
         node.y = newY;
         window.connectionNodes.delete(key);
         window.connectionNodes.set(getPointKey(newX, newY), node);
+        // ВАЖНО: задаём ВСЕ 4 координаты явно. fabric.Line._setWidthHeight
+        // пересчитывает left = min(x1, x2) после каждого set, а
+        // getLineAbsoluteEndpoints вычисляет abs от left — поэтому если
+        // менять только x1/y1 (или x2/y2), абсолют другой стороны линии
+        // съезжает на величину старого baseX. Снимок abs ДО изменения
+        // и установка всех 4 значений в виде абсолютных координат гарантирует
+        // что неперемещаемый конец остаётся на месте.
         for (let edge of node.incomingEdges) {
-          edge.line.set({ x2: newX, y2: newY });
+          const ep = getLineAbsoluteEndpoints(edge.line);
+          edge.line.set({ x1: ep.x1, y1: ep.y1, x2: newX, y2: newY });
           edge.line.setCoords();
           createOrUpdateAirVolumeText(edge.line);
         }
         for (let edge of node.outgoingEdges) {
-          edge.line.set({ x1: newX, y1: newY });
+          const ep = getLineAbsoluteEndpoints(edge.line);
+          edge.line.set({ x1: newX, y1: newY, x2: ep.x2, y2: ep.y2 });
           edge.line.setCoords();
           createOrUpdateAirVolumeText(edge.line);
         }
@@ -821,10 +906,14 @@ function extendSetupCanvasEvents() {
       invalidateCache();
       updateConnectionGraph();
       createOrUpdateAirVolumeText(obj);
+      // Авто-пересчёт после переноса конечной точки линии (одиночный drag)
+      if (typeof calculateAirFlowsSafe === 'function') {
+        setTimeout(() => calculateAirFlowsSafe(), 80);
+      }
     } else if (obj.id === 'intersection-point') {
-      const r = obj.radius || 6;
-      const cx = roundTo5(obj.left + r);
-      const cy = roundTo5(obj.top + r);
+      // С originX/Y='center' координаты left/top — это центр круга
+      const cx = roundTo5(obj.left);
+      const cy = roundTo5(obj.top);
       const key = getPointKey(cx, cy);
       const node = window.connectionNodes ? window.connectionNodes.get(key) : null;
       if (node) {
@@ -841,7 +930,13 @@ function extendSetupCanvasEvents() {
       setTimeout(() => {
         updateConnectionGraph();
         bringIntersectionPointsToFront();
-      }, 10);
+        // Перерисовать сетку — после drag точки она оказывается в произвольном
+        // z-order слое (intersection-point.bringToFront тащит и пакеты, и текст).
+        drawGrid(APP_CONFIG.GRID_SIZE);
+        // Авто-пересчёт после переноса узла (intersection-point) —
+        // изменилась длина связанных линий, расход и депрессия должны обновиться.
+        if (typeof calculateAirFlowsSafe === 'function') calculateAirFlowsSafe();
+      }, 80);
     }
   });
 
@@ -850,6 +945,10 @@ function extendSetupCanvasEvents() {
     lineDragState.pendingLine = null;
     lineDragState.pendingStartFree = undefined;
     lineDragState.pendingEndFree = undefined;
+    _lockActiveSelectionIfHasLines();
+  });
+  canvas.on('selection:updated', () => {
+    _lockActiveSelectionIfHasLines();
   });
   canvas.on('selection:cleared', () => {
     lineDragState.pending = false;
@@ -857,6 +956,23 @@ function extendSetupCanvasEvents() {
     lineDragState.pendingStartFree = undefined;
     lineDragState.pendingEndFree = undefined;
   });
+
+  // Блокировка перетаскивания группы (ActiveSelection), если в выделении есть
+  // линии: одиночный drag линии обрабатывается lineDragState с защитой узлов,
+  // а групповой fabric-translate ломает топологию (см. жалобу пользователя:
+  // «при таком выделении после можно разорвать схему»). Множественный select
+  // оставляем разрешённым — он нужен для batch-delete и пр.
+  function _lockActiveSelectionIfHasLines() {
+    const active = canvas.getActiveObject();
+    if (!active || active.type !== 'activeSelection') return;
+    const objs = (typeof active.getObjects === 'function') ? active.getObjects() : (active._objects || []);
+    const hasLines = objs.some(o => o && o.type === 'line');
+    if (hasLines) {
+      active.lockMovementX = true;
+      active.lockMovementY = true;
+      active.hasControls = false;
+    }
+  }
 }
 
 // Exports
@@ -888,6 +1004,7 @@ global.extendSetupCanvasEvents = extendSetupCanvasEvents;
 global.zoomIn = zoomIn;
 global.zoomOut = zoomOut;
 global.zoomReset = zoomReset;
+global.zoomToPoint = zoomToPoint;
 global.updateZoomIndicator = updateZoomIndicator;
 
 })(window);

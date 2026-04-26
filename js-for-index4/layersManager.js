@@ -3,8 +3,10 @@
   'use strict';
 
   // ==================== ДАННЫЕ ====================
+  // elevation — глубина горизонта в метрах (для 3D-вида).
+  // 0 = поверхность; отрицательные значения = под землёй.
   var layers = [
-    { id: 'default', name: 'Основной', visible: true, locked: true, color: null }
+    { id: 'default', name: 'Основной', visible: true, locked: true, color: null, elevation: 0 }
   ];
 
   // id текущего активного слоя (новые объекты создаются на нём)
@@ -28,9 +30,13 @@
   function createLayer() {
     var num = layers.length + 1;
     var id = 'layer_' + Date.now();
-    layers.push({ id: id, name: 'Слой ' + num, visible: true, locked: false, color: null });
+    // Автоматическая глубина: лесенка -50 м под предыдущий слой.
+    var prevElev = layers.length ? (layers[layers.length - 1].elevation || 0) : 0;
+    var autoElevation = prevElev - 50;
+    layers.push({ id: id, name: 'Слой ' + num, visible: true, locked: false, color: null, elevation: autoElevation });
     renderLayersPanel();
     populateLayerSelects();
+    _dispatchLayersChanged();
     if (typeof saveToUndoStack === 'function') saveToUndoStack();
   }
 
@@ -95,6 +101,30 @@
       canvas.requestRenderAll();
     }
     renderLayersPanel();
+  }
+
+  // ==================== ГЛУБИНА СЛОЯ (для 3D) ====================
+
+  function setLayerElevation(id, elevation) {
+    var layer = layers.find(function(l) { return l.id === id; });
+    if (!layer) return;
+    var val = parseFloat(elevation);
+    if (isNaN(val)) val = 0;
+    layer.elevation = val;
+    _dispatchLayersChanged();
+    if (typeof saveToUndoStack === 'function') saveToUndoStack();
+  }
+
+  function getLayerElevation(id) {
+    var layer = layers.find(function(l) { return l.id === id; });
+    return layer && typeof layer.elevation === 'number' ? layer.elevation : 0;
+  }
+
+  // Диспетчер кастомного события — 3D-модуль и другие слушатели перестраиваются
+  function _dispatchLayersChanged() {
+    try {
+      document.dispatchEvent(new CustomEvent('layers:changed'));
+    } catch (e) { /* IE — игнор */ }
   }
 
   // ==================== ЦВЕТ СЛОЯ ====================
@@ -357,10 +387,27 @@
         })(layer.id, nameSpan);
       }
 
+      // ── Поле глубины (elevation) для 3D-вида ──
+      var elevInput = document.createElement('input');
+      elevInput.type = 'number';
+      elevInput.step = '1';
+      elevInput.className = 'layer-elevation-input';
+      elevInput.value = (typeof layer.elevation === 'number') ? layer.elevation : 0;
+      elevInput.title = 'Глубина горизонта, м (для 3D-вида; 0 = поверхность, отрицательные = под землёй)';
+      elevInput.addEventListener('click', function(e) { e.stopPropagation(); });
+      elevInput.addEventListener('change', (function(lid, inp) {
+        return function() {
+          var val = parseFloat(inp.value);
+          if (isNaN(val)) val = 0;
+          setLayerElevation(lid, val);
+        };
+      })(layer.id, elevInput));
+
       // ── Кнопка удаления ──
       item.appendChild(eyeBtn);
       item.appendChild(colorDot);
       item.appendChild(nameSpan);
+      item.appendChild(elevInput);
 
       if (!layer.locked) {
         var delBtn = document.createElement('button');
@@ -404,19 +451,24 @@
 
   function setLayersData(data) {
     if (!Array.isArray(data) || !data.length) return;
-    layers = data.map(function(l) {
+    layers = data.map(function(l, idx) {
       return {
-        id:      l.id,
-        name:    l.name,
-        visible: l.visible !== false,
-        locked:  !!l.locked,
-        color:   l.color || null
+        id:        l.id,
+        name:      l.name,
+        visible:   l.visible !== false,
+        locked:    !!l.locked,
+        color:     l.color || null,
+        // Миграция старых JSON без поля elevation:
+        // default → 0, следующие слои — лесенка -50 м по индексу
+        elevation: (typeof l.elevation === 'number')
+                     ? l.elevation
+                     : (l.id === 'default' ? 0 : -50 * idx)
       };
     });
     // Убедиться что default всегда есть первым
     var defIdx = layers.findIndex(function(l) { return l.id === 'default'; });
     if (defIdx === -1) {
-      layers.unshift({ id: 'default', name: 'Основной', visible: true, locked: true, color: null });
+      layers.unshift({ id: 'default', name: 'Основной', visible: true, locked: true, color: null, elevation: 0 });
     } else if (defIdx > 0) {
       var def = layers.splice(defIdx, 1)[0];
       layers.unshift(def);
@@ -424,6 +476,7 @@
     layers[0].locked = true;
     renderLayersPanel();
     populateLayerSelects();
+    _dispatchLayersChanged();
   }
 
   function getLayers() { return layers; }
@@ -573,6 +626,8 @@
   global.isLayerVisible = isLayerVisible;
   global.applyLayerColorToObject = applyLayerColorToObject;
   global.applyAllLayerColors = applyAllLayerColors;
+  global.setLayerElevation = setLayerElevation;
+  global.getLayerElevation = getLayerElevation;
   global.getCalcNodeKey = getCalcNodeKey;
   global.getCrossLayerConnections = getCrossLayerConnections;
   global.setCrossLayerConnections = setCrossLayerConnections;

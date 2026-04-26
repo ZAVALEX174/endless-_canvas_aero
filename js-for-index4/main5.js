@@ -4,7 +4,7 @@
 // ==================== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ====================
 let canvas;
 let isDrawingLine = false;
-let isContinuousLineMode = false;
+let isContinuousLineMode = true;
 let lineStartPoint = null;
 let previewLine = null;
 let lastLineEndPoint = null;
@@ -90,6 +90,14 @@ document.addEventListener('DOMContentLoaded', () => {
   // Инициализация слоёв
   if (typeof renderLayersPanel === 'function') renderLayersPanel();
   if (typeof populateLayerSelects === 'function') populateLayerSelects();
+
+  // Подсветить кнопку «Непрерывный» если режим включён по умолчанию
+  const _contBtn = document.getElementById('continuousModeBtn');
+  if (_contBtn && isContinuousLineMode) _contBtn.classList.add('active');
+
+  // п.26: «Струя» включена по умолчанию — синхронизируем UI с состоянием
+  const _flowBtn = document.getElementById('flowColoringBtn');
+  if (_flowBtn && window.flowColoringEnabled) _flowBtn.classList.add('active');
 
   if (typeof initTabs === 'function') initTabs();
   if (typeof initLegend === 'function') initLegend();
@@ -197,6 +205,11 @@ function calculateAirFlowsSafe() {
       try { applyFlowColoring(); } catch (e) { console.warn('applyFlowColoring failed', e); }
     }, 50);
   }
+
+  // Событие для слушателей (3D-вид, будущие модули) — расчёт готов, данные в кэше
+  try {
+    document.dispatchEvent(new CustomEvent('calc:done'));
+  } catch (e) { /* IE — игнор */ }
 
   return result;
 }

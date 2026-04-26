@@ -96,9 +96,11 @@ function collectPointInfo(x, y) {
 
 function createIntersectionPoint(x, y, index, data, color = '#ff4757') {
   const circle = new fabric.Circle({
-    left: x - 6, top: y - 6,
+    left: x, top: y,
+    originX: 'center', originY: 'center',
     radius: 6, fill: color, stroke: color,
     selectable: true, hasControls: false, hasBorders: false,
+    lockScalingX: true, lockScalingY: true, lockRotation: true,
     id: 'intersection-point', pointIndex: index, pointData: data,
     hoverCursor: 'pointer'
   });
@@ -109,9 +111,9 @@ function createIntersectionPoint(x, y, index, data, color = '#ff4757') {
   });
 
   circle.on('mousedown', function (e) {
-    const r = this.radius || 6;
-    this._dragOrigX = this.left + r;
-    this._dragOrigY = this.top + r;
+    // С originX/Y='center' координаты left/top — это центр круга
+    this._dragOrigX = this.left;
+    this._dragOrigY = this.top;
     this._hasDragged = false;
     this._dragPrevX = undefined;
     this._dragPrevY = undefined;
@@ -119,9 +121,8 @@ function createIntersectionPoint(x, y, index, data, color = '#ff4757') {
 
   circle.on('mouseup', function (e) {
     if (!this._hasDragged) {
-      const r = this.radius || 6;
-      const cx = this.left + r;
-      const cy = this.top + r;
+      const cx = this.left;
+      const cy = this.top;
       const info = collectPointInfo(cx, cy);
       showIntersectionPointInfoModal(info);
     }
@@ -205,24 +206,10 @@ function mergeNearbyIntersections(intersections, threshold) {
   return result;
 }
 
-function splitAllLines() {
-  const activeLayerId = typeof getActiveLayerId === 'function' ? getActiveLayerId() : 'default';
-  clearIntersectionPoints();
-  let intersections = findAllIntersections(activeLayerId);
-  intersections = mergeNearbyIntersections(intersections, APP_CONFIG.SNAP_RADIUS);
-  intersectionPoints = intersections;
-  // Визуализируем только уникальные точки (после кластеризации может быть несколько записей с одними координатами)
-  const visualized = new Set();
-  let vizIdx = 0;
-  intersections.forEach((inter) => {
-    const key = inter.x + '_' + inter.y;
-    if (!visualized.has(key)) {
-      visualized.add(key);
-      createIntersectionPoint(inter.x, inter.y, vizIdx++, inter);
-    }
-  });
-
-  const lines = getCachedLines().filter(l => (l.properties && l.properties.layerId || 'default') === activeLayerId);
+// Собирает сегменты для разделения линий одного слоя по его пересечениям.
+// Не меняет canvas — возвращает { linesToRemove, linesToAdd }.
+function _collectSplitsForLayer(layerId, intersections) {
+  const lines = getCachedLines().filter(l => (l.properties && l.properties.layerId || 'default') === layerId);
   const linesToRemove = [];
   const linesToAdd = [];
 
@@ -281,20 +268,100 @@ function splitAllLines() {
     }
   }
 
-  if (linesToRemove.length) {
+  return { linesToRemove, linesToAdd };
+}
+
+function splitAllLines() {
+  // п.26: разделение должно охватывать все видимые слои в одном вызове,
+  // иначе пользователь получает «две схемы вместо одной» — на каждом слое
+  // приходится переключать активный слой и нажимать «Разделить» отдельно.
+  // Слои остаются физически независимыми (разные горизонты): пересечения
+  // ищутся только между линиями одного слоя. Объединение слоёв — через
+  // явные cross-layer-точки (см. layersManager.js: addCrossLayerConnection).
+  const allLayers = typeof getLayers === 'function' ? getLayers() : [{ id: 'default', visible: true }];
+  const targetLayerIds = allLayers
+    .filter(l => l.visible !== false)
+    .map(l => l.id);
+  if (!targetLayerIds.length) targetLayerIds.push('default');
+
+  clearIntersectionPoints();
+
+  // Собираем пересечения и сегменты по каждому слою
+  let allLinesToRemove = [];
+  let allLinesToAdd = [];
+
+  for (const layerId of targetLayerIds) {
+    let layerInters = findAllIntersections(layerId);
+    layerInters = mergeNearbyIntersections(layerInters, APP_CONFIG.SNAP_RADIUS);
+
+    const result = _collectSplitsForLayer(layerId, layerInters);
+    allLinesToRemove = allLinesToRemove.concat(result.linesToRemove);
+    allLinesToAdd = allLinesToAdd.concat(result.linesToAdd);
+  }
+
+  // Применяем разделения ДО построения маркеров — чтобы маркеры покрывали
+  // финальную геометрию (post-split endpoints включаются автоматически).
+  let didSplit = false;
+  if (allLinesToRemove.length) {
     saveToUndoStack();
-    for (let line of linesToRemove) { canvas.remove(line); removeAirVolumeText(line); }
-    for (let seg of linesToAdd) {
+    for (let line of allLinesToRemove) { canvas.remove(line); removeAirVolumeText(line); }
+    for (let seg of allLinesToAdd) {
       canvas.add(seg);
       if (typeof applyLayerColorToObject === 'function') applyLayerColorToObject(seg);
       createOrUpdateAirVolumeText(seg);
     }
     invalidateCache();
+    didSplit = true;
+  }
+
+  // п.4: Маркеры на ВСЕХ узлах (степень ≥ 1), не только на пересечениях.
+  // Строим карту узлов из текущих endpoints всех видимых линий, считаем степень,
+  // дедуплицируем по 2D-координатам (cross-layer узлы получают один маркер).
+  const nodeMap = new Map();
+  getCachedLines().forEach(line => {
+    const lid = (line.properties && line.properties.layerId) || 'default';
+    if (!targetLayerIds.includes(lid)) return;
+    const ep = getLineAbsoluteEndpoints(line);
+    [{ x: ep.x1, y: ep.y1 }, { x: ep.x2, y: ep.y2 }].forEach(p => {
+      const key = getPointKey(p.x, p.y) + '@' + lid;
+      const ex = nodeMap.get(key);
+      if (ex) ex.degree++;
+      else nodeMap.set(key, { x: p.x, y: p.y, degree: 1, layerId: lid });
+    });
+  });
+
+  const visualized = new Set();
+  let vizIdx = 0;
+  const visList = [];
+  nodeMap.forEach(node => {
+    const visKey = roundTo5(node.x) + '_' + roundTo5(node.y);
+    if (visualized.has(visKey)) return;
+    visualized.add(visKey);
+    // Концевые узлы (степень 1) — синие, чтобы визуально отличались от
+    // пересечений/разветвлений (красные).
+    const color = node.degree === 1 ? '#3498db' : '#ff4757';
+    const data = { x: node.x, y: node.y, degree: node.degree, layerId: node.layerId };
+    createIntersectionPoint(node.x, node.y, vizIdx++, data, color);
+    visList.push(data);
+  });
+  intersectionPoints = visList;
+
+  if (didSplit) {
     updateConnectionGraph();
     scheduleRender();
-    showNotification(`Разделено ${linesToRemove.length} линий на ${linesToAdd.length} сегментов`, 'success');
+    const layersInfo = targetLayerIds.length > 1 ? ` (слоёв: ${targetLayerIds.length})` : '';
+    showNotification(`Разделено ${allLinesToRemove.length} линий на ${allLinesToAdd.length} сегментов${layersInfo}`, 'success');
+    // После разделения стрелки направлений в новых сегментах не имеют startNode/endNode —
+    // показывают «нарисованное» направление, которое часто противоположно потоку.
+    // Запускаем расчёт, чтобы стрелки и расходы соответствовали реальной сети (п.25).
+    if (typeof calculateAirFlowsSafe === 'function') {
+      setTimeout(() => calculateAirFlowsSafe(), 60);
+    }
+  } else if (vizIdx > 0) {
+    scheduleRender();
+    showNotification(`Узлов на схеме: ${vizIdx}`, 'info');
   } else {
-    showNotification('Нет линий для разделения', 'info');
+    showNotification('Нет линий', 'info');
   }
 }
 

@@ -8,6 +8,8 @@
   <script src="./js/fabric-min.js"></script>
   <script src="./js/vendor/jspdf.umd.min.js"></script>
   <script src="./js/vendor/html2canvas.min.js"></script>
+  <script src="./js/vendor/three.min.js"></script>
+  <script src="./js/vendor/OrbitControls.js"></script>
 
   <!-- CSS — порядок загрузки важен -->
   <link rel="stylesheet" href="./styles/variables.css">
@@ -18,6 +20,7 @@
   <link rel="stylesheet" href="./styles/panels.css">
   <link rel="stylesheet" href="./styles/modal.css">
   <link rel="stylesheet" href="./styles/animations.css">
+  <link rel="stylesheet" href="./styles/view3d.css">
 </head>
 
 <body>
@@ -62,7 +65,7 @@
 
       <!-- Группа 1.5: Связь слоёв -->
       <div class="toolbar-group">
-        <button class="toolbar-btn" id="crossLayerBtn" data-tooltip="Точка связи слоёв (клик на холст = поставить/убрать)" onclick="toggleCrossLayerMode()">
+        <button class="toolbar-btn" id="crossLayerBtn" data-tooltip="Связь слоёв: объединяет узлы разных слоёв в один расчётный узел. Включи режим, кликни на пересечение линий разных слоёв — повторный клик убирает связь." onclick="toggleCrossLayerMode()">
           <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
             <line x1="2" y1="9" x2="16" y2="9"/>
             <line x1="9" y1="2" x2="9" y2="16"/>
@@ -71,13 +74,20 @@
         </button>
       </div>
 
-      <!-- Группа 2: Разделить, Непрерывный -->
+      <!-- Группа 2: Разделить, Упростить, Непрерывный -->
       <div class="toolbar-group">
         <button class="toolbar-btn" data-tooltip="Разделить" data-hotkey="S" onclick="splitAllLines()">
           <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
             <line x1="2" y1="9" x2="7" y2="9"/>
             <line x1="11" y1="9" x2="16" y2="9"/>
             <circle cx="9" cy="9" r="1.5" fill="currentColor"/>
+          </svg>
+        </button>
+        <button class="toolbar-btn" data-tooltip="Упростить (объединить сегменты)" onclick="simplifyAllLines()">
+          <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="2" y1="9" x2="16" y2="9"/>
+            <polyline points="6,6 9,9 6,12"/>
+            <polyline points="12,6 9,9 12,12"/>
           </svg>
         </button>
         <button class="toolbar-btn" id="continuousModeBtn" data-tooltip="Непрерывный" onclick="toggleContinuousMode()">
@@ -145,7 +155,24 @@
             <circle cx="9" cy="9" r="6"/><line x1="6" y1="9" x2="12" y2="9"/><line x1="9" y1="6" x2="9" y2="12"/>
           </svg>
         </button>
-        <span class="zoom-level" id="zoomLevel" data-tooltip="Масштаб">100%</span>
+        <input type="number" class="zoom-level" id="zoomLevel" data-tooltip="Масштаб (можно ввести вручную, %)" min="10" max="500" step="5" value="100" style="width:46px;text-align:center;background:transparent;border:none;color:inherit;font-size:11px;-moz-appearance:textfield;">
+        <script>
+          (function(){
+            var el = document.getElementById('zoomLevel');
+            if (!el) return;
+            el.addEventListener('change', function() {
+              var pct = Math.max(10, Math.min(500, parseInt(this.value) || 100));
+              this.value = pct;
+              if (typeof window.canvas !== 'undefined' && window.canvas && typeof window.zoomToPoint === 'function') {
+                var center = new fabric.Point(window.canvas.width / 2, window.canvas.height / 2);
+                window.zoomToPoint(center, pct / 100);
+              } else if (window.canvas && typeof drawGrid === 'function') {
+                window.canvas.zoomToPoint(new fabric.Point(window.canvas.width/2, window.canvas.height/2), pct/100);
+                drawGrid(APP_CONFIG.GRID_SIZE);
+              }
+            });
+          })();
+        </script>
         <button class="toolbar-btn" id="zoomOutBtn" data-tooltip="Отдалить" onclick="zoomOut()">
           <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="9" cy="9" r="6"/><line x1="6" y1="9" x2="12" y2="9"/>
@@ -224,6 +251,7 @@
 
       <button class="context-btn" data-tooltip="Добавить изображение" onclick="showAddImageModal()">+ Объект</button>
       <button class="context-btn" data-tooltip="Загрузить схему" onclick="loadDrawing()">Загрузить</button>
+      <button class="context-btn" data-tooltip="3D-вид шахты" onclick="open3DView()">3D-вид</button>
       <button class="context-btn btn-danger" data-tooltip="Очистить холст" onclick="clearCanvas()" style="border-color:var(--color-fire);color:var(--color-fire);">Очистить</button>
     </div>
 
@@ -362,13 +390,13 @@
         <h2 class="modal-title">Свойства линии</h2>
         <button class="close-modal" onclick="closeLinePropertiesModal()">&times;</button>
       </div>
-      <form id="linePropertiesForm" class="modal-form">
+      <form id="linePropertiesForm" class="modal-form modal-form--vertical">
         <div class="form-row">
-          <div class="form-group" style="flex:2">
+          <div class="form-group">
             <label class="form-label">Название:</label>
             <input type="text" id="propertyName" placeholder="Например: Главная ветвь" required>
           </div>
-          <div class="form-group" style="flex:1">
+          <div class="form-group">
             <label class="form-label">Номер:</label>
             <input type="number" id="propertyNumber" min="1" step="1" value="1">
           </div>
@@ -579,7 +607,7 @@
         <div class="form-row">
           <div class="form-group">
             <label for="objAirVolume">Подача / расход Q0 (м³/с):</label>
-            <input type="number" step="0.1" id="objAirVolume" name="objAirVolume">
+            <input type="number" step="0.1" min="0" id="objAirVolume" name="objAirVolume" title="Модуль расхода. Направление задаётся переключателем «Режим вентилятора» (Подача / Реверс).">
           </div>
           <div class="form-group">
             <label for="objAirResistance">Локальное сопротивление Robj (Н·с²/м⁴):</label>
@@ -760,7 +788,7 @@
         <h2 class="modal-title">Информация о точке разделения</h2>
         <button class="close-modal" onclick="closeIntersectionPointModal()">&times;</button>
       </div>
-      <div id="intersectionPointInfo" style="padding: 20px;"></div>
+      <div id="intersectionPointModalContent" style="padding: 20px;"></div>
       <div class="modal-buttons">
         <button class="btn btn-secondary" onclick="closeIntersectionPointModal()">Закрыть</button>
       </div>
@@ -833,6 +861,46 @@
   <!-- Контейнер для уведомлений -->
   <div id="notificationContainer"></div>
 
+  <!-- ═══ 3D-ВИД (оверлей) ═══ -->
+  <div id="view3dOverlay" class="view3d-overlay" style="display:none;">
+    <div class="view3d-header">
+      <span class="view3d-title">3D-вид шахты</span>
+      <div class="view3d-header-controls">
+        <button class="view3d-btn" id="view3dRebuildBtn" title="Перестроить сцену по текущей 2D-схеме">Обновить</button>
+        <button class="view3d-btn view3d-btn-close" onclick="close3DView()" title="Закрыть (Esc)">×</button>
+      </div>
+    </div>
+    <div class="view3d-body">
+      <canvas id="view3dCanvas"></canvas>
+      <div class="view3d-controls" id="view3dControls">
+        <div class="view3d-control-row">
+          <label class="view3d-label">Z-усиление: <span id="v3d_zExagVal">3</span></label>
+          <input type="range" id="v3d_zExag" min="1" max="10" step="0.5" value="3">
+        </div>
+        <div class="view3d-control-row">
+          <label class="view3d-label">Радиус труб: <span id="v3d_radiusVal">1</span></label>
+          <input type="range" id="v3d_radius" min="0.3" max="3" step="0.1" value="1">
+        </div>
+        <div class="view3d-control-row">
+          <label class="view3d-label"><input type="checkbox" id="v3d_labels"> Номера узлов</label>
+        </div>
+        <div class="view3d-control-row">
+          <label class="view3d-label"><input type="checkbox" id="v3d_colorByFlow" checked> Цвет по расходу Q</label>
+        </div>
+        <div class="view3d-legend" id="view3dLegend">
+          <div class="view3d-legend-title">Легенда</div>
+          <div class="view3d-legend-item"><span class="view3d-legend-dot" style="background:#f0a500"></span>Вентилятор</div>
+          <div class="view3d-legend-item"><span class="view3d-legend-dot" style="background:#e85454"></span>Клапан</div>
+          <div class="view3d-legend-item"><span class="view3d-legend-dot" style="background:#4f9aff"></span>Атмосфера</div>
+          <div class="view3d-legend-item"><span class="view3d-legend-dot" style="background:#ff6b2b"></span>Пожар</div>
+          <div class="view3d-legend-item"><span class="view3d-legend-dot" style="background:#999"></span>Прочие</div>
+          <div class="view3d-legend-item"><span class="view3d-legend-dot" style="background:#2ed573"></span>Вертикальный ствол</div>
+        </div>
+      </div>
+      <div class="view3d-hint" id="view3dHint">ЛКМ — вращение · ПКМ — панорама · Колесо — зум · Esc — закрыть</div>
+    </div>
+  </div>
+
   <!-- Модули проекта (порядок загрузки важен!) -->
   <script src="js-for-index4/uiTheme.js"></script>
   <script src="js-for-index4/config.js"></script>
@@ -860,6 +928,7 @@
   <script src="js-for-index4/csvExport.js"></script>
   <script src="js-for-index4/pdfExport.js"></script>
   <script src="js-for-index4/testExport.js"></script>
+  <script src="js-for-index4/view3d.js"></script>
 </body>
 
 </html>

@@ -95,7 +95,12 @@ function updateConnectionGraph() {
       const { nodes } = buildNetworkGraph({ includeLockedInfo: true });
       window.connectionNodes = new Map();
       nodes.forEach((node, key) => {
-        if (node.locked || node.incomingEdges.length + node.outgoingEdges.length > 1) {
+        // Включаем ВСЕ узлы (вкл. степени 1) — drag синего endpoint-маркера
+        // должен тащить линию. Раньше degree-1 были исключены из connectionNodes,
+        // поэтому drag не находил узел и кружок отрывался от линии.
+        // isPointInLockedNode/Delete-проверки фильтруют по node.locked отдельно,
+        // так что добавление degree-1 нелоченных узлов их не задевает.
+        if (node.incomingEdges.length + node.outgoingEdges.length >= 1) {
           window.connectionNodes.set(key, node);
         }
       });

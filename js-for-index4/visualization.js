@@ -116,17 +116,17 @@ function createOrUpdateAirVolumeText(line) {
   const offsetY = -Math.cos(drawAngle * Math.PI / 180) * offset;
   const q = parseFloat(line.properties.airVolume) || 0;
 
-  // Определяем направление стрелки: сравниваем startNode с концами линии.
-  // Если поток идёт x1→x2 — стрелка →, если x2→x1 — стрелка ←.
-  let directionArrow = '→';
+  // Текст рисуется вдоль линии (angle = drawAngle), поэтому "→" в тексте
+  // после поворота превращается в стрелку вдоль линии (x1→x2).
+  // Если поток идёт x2→x1 — нужна "←", после поворота получим противоположное.
+  // ВАЖНО: используем ТОЛЬКО →/←, а не ↓/↑ — после поворота на ±90°
+  // символы ↓/↑ перерисовываются вбок, что визуально ломает стрелку.
   const p = line.properties || {};
   const startNode = p.startNode || '';
+  let directionArrow = '→';
   if (startNode) {
     const k2 = getPointKey(endpoints.x2, endpoints.y2);
-    if (startNode === k2) {
-      // Поток идёт от x2 к x1, а текст расположен по x1→x2 — нужна ←
-      directionArrow = '←';
-    }
+    if (startNode === k2) directionArrow = '←';
   }
 
   // Формирование надписи согласно пользовательским настройкам
@@ -205,9 +205,9 @@ function updateAllNodeLabels() {
   visuals.forEach((visual, index) => {
     const circle = visual.circle;
     const text = visual.text;
-    const radius = circle.radius || 6;
-    const x = (circle.left || 0) + radius;
-    const y = (circle.top || 0) + radius;
+    // С originX/Y='center' circle.left/top — уже центр круга
+    const x = (circle.left || 0);
+    const y = (circle.top || 0);
 
     text.set({ left: x, top: y });
     text.set('text', String(index + 1));
@@ -305,7 +305,10 @@ function updateSealedNodeVisuals() {
 
 var FLOW_FRESH_COLOR = '#e74c3c';          // красный — свежая струя
 var FLOW_CONTAMINATED_COLOR = '#3498db';   // синий — загрязнённая
-if (typeof global.flowColoringEnabled === 'undefined') global.flowColoringEnabled = false;
+// п.26: раскраска струи включена по умолчанию — пользователь раньше не находил
+// кнопку «Струя» и не понимал, что функция вообще есть. После первого расчёта
+// схема автоматически окрашивается; кнопкой можно выключить.
+if (typeof global.flowColoringEnabled === 'undefined') global.flowColoringEnabled = true;
 
 function clearFlowColoring() {
   var restored = 0;
@@ -485,6 +488,17 @@ function clearDanglingMarkers() {
 }
 
 function checkDanglingConnections() {
+  // Toggle: повторный клик при уже подсвеченных маркерах — просто снимает подсветку
+  var existing = canvas.getObjects().filter(function(o) { return o.id === 'dangling-marker'; });
+  if (existing.length) {
+    clearDanglingMarkers();
+    var btn = document.getElementById('checkConnectionsBtn');
+    if (btn) btn.classList.remove('active');
+    canvas.renderAll();
+    if (typeof showNotification === 'function') showNotification('Подсветка висящих концов снята', 'info');
+    return;
+  }
+
   clearDanglingMarkers();
   var lines = getCachedLines().filter(function(l) { return l.visible !== false; });
   if (!lines.length) {
@@ -553,13 +567,91 @@ function checkDanglingConnections() {
     mark.bringToFront();
   });
 
+  var btn = document.getElementById('checkConnectionsBtn');
+  if (btn) btn.classList.add('active');
+
   canvas.renderAll();
   if (typeof showNotification === 'function') {
     showNotification('Висящих концов: ' + dangling.length + ' (жёлтые круги). Нажмите ещё раз, чтобы убрать подсветку.', 'warning');
   }
 }
 
+// ═══ п.11: Жёлтая подсветка линии/узла привязки выбранного объекта ════════
+// При выделении объекта (вентилятор/клапан/атмосфера и т.п.) подсвечиваем
+// элемент сети, к которому он привяжется в расчёте: ближайший узел (≤18 px)
+// или ближайшую линию (≤35 px). Это совпадает с логикой
+// collectNetworkAttachmentInfo в networkBuilder.js (фактическая привязка).
+var _attachHighlightedLine = null;
+var _attachHighlightedNodeMarker = null;
+
+function clearAttachmentHighlight() {
+  if (_attachHighlightedNodeMarker) {
+    if (canvas) canvas.remove(_attachHighlightedNodeMarker);
+    _attachHighlightedNodeMarker = null;
+  }
+  if (_attachHighlightedLine) {
+    if (typeof _attachHighlightedLine._origStrokeForAttachment === 'string') {
+      _attachHighlightedLine.set('stroke', _attachHighlightedLine._origStrokeForAttachment);
+    }
+    delete _attachHighlightedLine._origStrokeForAttachment;
+    _attachHighlightedLine = null;
+  }
+  if (canvas) canvas.requestRenderAll();
+}
+
+function highlightAttachmentForObject(obj) {
+  clearAttachmentHighlight();
+  if (!obj || obj.type !== 'image') return;
+  if (typeof getObjectCenter !== 'function' || typeof getCachedLines !== 'function') return;
+  var c = getObjectCenter(obj);
+  var lid = (obj.properties && obj.properties.layerId) || 'default';
+  // Фильтруем по слою — привязка на чужом слое не имеет смысла
+  var lines = getCachedLines().filter(function(l) {
+    return ((l.properties && l.properties.layerId) || 'default') === lid;
+  });
+
+  // 1) Узел в радиусе 18 px (приоритет: вентилятор/атмосфера крепится к узлу)
+  var bestNode = null, bestNodeDist = 18;
+  lines.forEach(function(line) {
+    if (typeof getLineAbsoluteEndpoints !== 'function') return;
+    var ep = getLineAbsoluteEndpoints(line);
+    [{ x: ep.x1, y: ep.y1 }, { x: ep.x2, y: ep.y2 }].forEach(function(p) {
+      var d = Math.hypot(p.x - c.x, p.y - c.y);
+      if (d < bestNodeDist) { bestNodeDist = d; bestNode = p; }
+    });
+  });
+  if (bestNode) {
+    _attachHighlightedNodeMarker = new fabric.Circle({
+      left: bestNode.x, top: bestNode.y,
+      originX: 'center', originY: 'center',
+      radius: 14, fill: 'transparent',
+      stroke: '#f1c40f', strokeWidth: 3,
+      selectable: false, evented: false,
+      id: 'attachment-highlight'
+    });
+    canvas.add(_attachHighlightedNodeMarker);
+    _attachHighlightedNodeMarker.bringToFront();
+    canvas.requestRenderAll();
+    return;
+  }
+
+  // 2) Линия в радиусе 35 px (объект на ребре)
+  if (typeof findLinesInArea !== 'function') return;
+  var hits = findLinesInArea(c.x, c.y, 35).filter(function(h) {
+    return ((h.line.properties && h.line.properties.layerId) || 'default') === lid;
+  });
+  if (hits.length) {
+    var target = hits[0].line;
+    target._origStrokeForAttachment = target.stroke;
+    target.set('stroke', '#f1c40f');
+    _attachHighlightedLine = target;
+    canvas.requestRenderAll();
+  }
+}
+
 // Export all functions to global scope
+global.highlightAttachmentForObject = highlightAttachmentForObject;
+global.clearAttachmentHighlight = clearAttachmentHighlight;
 global.clearSmokeVisualization = clearSmokeVisualization;
 global.applySmokeVisualization = applySmokeVisualization;
 global.getAttachedObjectsForChainEnd = getAttachedObjectsForChainEnd;

@@ -1,0 +1,202 @@
+/* ═══════════════════════════════════════════════════════════════════
+   view3d.css — Стили оверлея 3D-вида шахтной сети
+   ═══════════════════════════════════════════════════════════════════ */
+
+.view3d-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: #0a0e1a;
+  display: flex;
+  flex-direction: column;
+  font-family: inherit;
+  color: #e6e9ef;
+}
+
+.view3d-header {
+  flex: 0 0 auto;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  background: #141826;
+  border-bottom: 1px solid #222a3d;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.view3d-title {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  color: #e6e9ef;
+}
+
+.view3d-header-controls {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.view3d-btn {
+  background: #1d2235;
+  color: #d4d9e4;
+  border: 1px solid #2a3148;
+  border-radius: 4px;
+  padding: 5px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.view3d-btn:hover {
+  background: #2a3148;
+  border-color: #3a4262;
+}
+
+.view3d-btn-close {
+  width: 32px;
+  height: 28px;
+  padding: 0;
+  font-size: 20px;
+  line-height: 1;
+  color: #e85454;
+}
+
+.view3d-btn-close:hover {
+  background: #3a1e20;
+  border-color: #e85454;
+}
+
+.view3d-body {
+  flex: 1 1 auto;
+  position: relative;
+  overflow: hidden;
+}
+
+#view3dCanvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  outline: none;
+}
+
+.view3d-controls {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 220px;
+  background: rgba(20, 24, 38, 0.88);
+  backdrop-filter: blur(6px);
+  border: 1px solid #2a3148;
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 12px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
+}
+
+.view3d-control-row {
+  margin-bottom: 8px;
+}
+
+.view3d-control-row:last-child {
+  margin-bottom: 0;
+}
+
+.view3d-label {
+  display: block;
+  margin-bottom: 3px;
+  color: #b8bfd0;
+  font-size: 11px;
+}
+
+.view3d-label input[type="checkbox"] {
+  margin-right: 5px;
+  vertical-align: middle;
+}
+
+.view3d-controls input[type="range"] {
+  width: 100%;
+  accent-color: #4f9aff;
+}
+
+.view3d-legend {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid #2a3148;
+}
+
+.view3d-legend-title {
+  font-size: 11px;
+  color: #8a92a6;
+  margin-bottom: 5px;
+  letter-spacing: 0.3px;
+}
+
+.view3d-legend-item {
+  display: flex;
+  align-items: center;
+  font-size: 11px;
+  color: #b8bfd0;
+  margin-bottom: 3px;
+}
+
+.view3d-legend-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  flex-shrink: 0;
+}
+
+.view3d-hint {
+  position: absolute;
+  bottom: 12px;
+  left: 14px;
+  font-size: 11px;
+  color: #6a7184;
+  background: rgba(20, 24, 38, 0.6);
+  padding: 5px 10px;
+  border-radius: 4px;
+  pointer-events: none;
+  user-select: none;
+}
+
+.view3d-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 10px;
+  color: #6a7184;
+  font-size: 14px;
+  pointer-events: none;
+}
+
+.view3d-empty-icon {
+  font-size: 48px;
+  opacity: 0.4;
+}
+
+/* Поле elevation в панели слоёв */
+.layer-elevation-input {
+  width: 52px;
+  font-size: 10px;
+  padding: 1px 3px;
+  background: var(--color-hover, #1a1d2e);
+  border: 1px solid var(--color-border, #2a3148);
+  border-radius: 3px;
+  color: var(--color-text-primary, #d4d9e4);
+  text-align: right;
+  flex-shrink: 0;
+  margin-right: 2px;
+}
+
+.layer-elevation-input:focus {
+  outline: none;
+  border-color: var(--color-accent, #4a9eff);
+}

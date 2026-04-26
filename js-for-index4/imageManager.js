@@ -305,16 +305,36 @@ function addImageAtPosition(x, y) {
     return;
   }
 
+  // п.10: Объект должен быть привязан к линии (≤35 px). findLinesInArea
+  // возвращает массив с проекцией точки клика на ближайшую линию (включая
+  // endpoints — findClosestPointOnLine клампит param в [0,1]).
+  // Если линий поблизости нет — отказ. Это страхует от "висящих" объектов,
+  // которые не попадают в граф расчёта.
+  const SNAP_DIST = 35;
+  let attachX, attachY;
+  const lineHits = (typeof findLinesInArea === 'function') ? findLinesInArea(x, y, SNAP_DIST) : [];
+  if (lineHits.length) {
+    attachX = lineHits[0].point.x;
+    attachY = lineHits[0].point.y;
+  } else {
+    showNotification('Объект должен быть на линии (≤35 px). Сначала нарисуйте линию.', 'error');
+    return;
+  }
+
   const selectedImageData = { ...currentImageData };
 
   loadFabricImage(selectedImageData.path, (img, resolvedUrl) => {
     const scale = Math.min(APP_CONFIG.MAX_IMAGE_SIZE / img.width, APP_CONFIG.MAX_IMAGE_SIZE / img.height, 1);
     img.set({
-      left: snapToGrid(x), top: snapToGrid(y),
+      left: attachX, top: attachY,
       scaleX: scale, scaleY: scale,
       originX: 'center', originY: 'center',
       hasControls: true, hasBorders: true,
       selectable: true,
+      // Запрещаем вращение для всех объектов (особенно вентилятора — п.12).
+      // Анимация лопастей в toggleFanAnimationAndReverse использует fan.set('angle')
+      // — это работает в обход lockRotation (Fabric проверяет lock только на UI-контролах).
+      lockRotation: true,
       shadow: new fabric.Shadow({ color: (typeof getCV === 'function' ? getCV('--image-shadow-color') : 'rgba(255,255,255,0.45)') || 'rgba(255,255,255,0.45)', blur: 6, offsetX: 0, offsetY: 0 }),
       properties: synchronizeObjectDerivedProperties({
         name: selectedImageData.name,
