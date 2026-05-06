@@ -203,6 +203,11 @@ function showAirVolumeReport() {
 // Пользователь явно попросил, чтобы оповещения не скрывались автоматом —
 // здесь можно посмотреть всё, что когда-либо появлялось, даже после ×.
 function showNotificationLogModal() {
+  // Пересоздаём модалку с нуля — иначе createModal обновляет только body,
+  // а footer с кнопками остаётся старым (с устаревшим списком).
+  const oldModal = document.getElementById('notificationLogModal');
+  if (oldModal) oldModal.remove();
+
   const log = (typeof getNotificationLog === 'function' ? getNotificationLog() : (window.notificationLog || []));
   const sorted = log.slice().reverse(); // свежие сверху
   const fmtTs = (ts) => {
@@ -237,16 +242,19 @@ function showNotificationLogModal() {
     html += '</table></div>';
   }
   html += '</div>';
+  // ВАЖНО: createModal помещает onClick прямо в атрибут onclick="…" с двойными
+  // кавычками снаружи. Внутри строки используем ТОЛЬКО одинарные кавычки —
+  // двойные ломают HTML-парсинг атрибута и кнопки молча перестают работать.
   createModal('notificationLogModal', 'Журнал уведомлений', html, [
     {
       text: 'Очистить журнал',
       class: 'btn-danger',
-      onClick: 'clearNotificationLog(); document.getElementById("notificationLogModal").style.display="none"; showNotification("Журнал очищен", "info");'
+      onClick: "clearNotificationLog(); document.getElementById('notificationLogModal').style.display='none'; showNotification('Журнал очищен', 'info');"
     },
     {
       text: 'Закрыть все на экране',
       class: 'btn-secondary',
-      onClick: 'dismissAllNotifications(); document.getElementById("notificationLogModal").style.display="none";'
+      onClick: "dismissAllNotifications(); document.getElementById('notificationLogModal').style.display='none';"
     }
   ]);
 }
@@ -286,11 +294,13 @@ function _findMergeCandidates(layerId) {
     });
     if (hasObject) return;
 
-    // Заблокированный узел не трогаем
-    if (typeof isPointInLockedNode === 'function') {
-      const nc = isPointInLockedNode(px, py);
-      if (nc && nc.node && nc.node.locked) return;
-    }
+    // ВНИМАНИЕ: проверка isPointInLockedNode УДАЛЕНА.
+    // Раньше она блокировала simplify во всех проходных узлах сети,
+    // т.к. nodeLockEnabled=true глобально помечает узлы степени ≥ 2 как
+    // locked (защита от случайного удаления). Но «Упростить» — намеренное
+    // действие пользователя, и проходной узел при объединении ПРОПАДАЕТ
+    // (две линии становятся одной), а не «удаляется содержимое». Защита
+    // от удаления тут не нужна.
 
     const [a, b] = items;
     // Внешние концы сегментов (противоположные узлу)

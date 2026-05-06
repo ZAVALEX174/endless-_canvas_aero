@@ -293,15 +293,27 @@ input[type="range"] {
   margin: 4px 0;
 }
 
-/* === Нотификации === */
+/* === Нотификации ===
+ * Перенесены в ЛЕВЫЙ НИЖНИЙ угол — раньше top:right перекрывал тулбар и
+ * правую панель (юзер «не мог подобраться к кнопкам»).
+ * pointer-events: none на контейнере → клики проходят сквозь промежутки
+ * между уведомлениями. На самих карточках pointer-events: auto, чтобы
+ * кнопка × ловила клик.
+ * max-height + overflow:auto → если уведомлений много, они скроллятся,
+ * не растягивая контейнер до верха экрана. */
 #notificationContainer {
   position: fixed;
-  top: 12px;
-  right: 12px;
+  /* Сдвигаем на ширину левого тулбара (--toolbar-width = 52px) + 12px отступ,
+     чтобы уведомления не закрывали кнопки undo/redo и низ тулбара. */
+  left: calc(var(--toolbar-width, 52px) + 12px);
+  bottom: 12px;
   z-index: 3000;
   display: flex;
-  flex-direction: column;
+  flex-direction: column-reverse; /* свежие сверху стека */
   gap: 8px;
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
+  pointer-events: none;
 }
 
 .notification {
@@ -314,6 +326,7 @@ input[type="range"] {
   max-width: 360px;
   font-size: var(--font-size-base);
   color: var(--color-text-primary);
+  pointer-events: auto;
 }
 
 .notification button {
@@ -357,7 +370,8 @@ input[type="range"] {
 }
 
 @keyframes notifSlideIn {
-  from { opacity: 0; transform: translateX(20px); }
+  /* въезд с левой стороны (контейнер стоит у левого края) */
+  from { opacity: 0; transform: translateX(-20px); }
   to   { opacity: 1; transform: translateX(0); }
 }
 
