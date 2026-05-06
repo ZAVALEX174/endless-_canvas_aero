@@ -66,7 +66,10 @@
 
       <!-- Группа 1.5: Связь слоёв -->
       <div class="toolbar-group">
-        <button class="toolbar-btn" id="crossLayerBtn" data-tooltip="Связь слоёв: объединяет узлы разных слоёв в один расчётный узел. Включи режим, кликни на пересечение линий разных слоёв — повторный клик убирает связь." onclick="toggleCrossLayerMode()">
+        <!-- Связь слоёв теперь определяется АВТОМАТИЧЕСКИ при касании endpoint
+             линии одного слоя на линию другого слоя (≤10px). Жёлтая ★ = авто,
+             зелёная ★ = ручная (старые точки сохранены, кнопку скрыли). -->
+        <button class="toolbar-btn" id="crossLayerBtn" data-tooltip="Связь слоёв (ручной режим, скрыт)" onclick="toggleCrossLayerMode()" style="display:none;">
           <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
             <line x1="2" y1="9" x2="16" y2="9"/>
             <line x1="9" y1="2" x2="9" y2="16"/>

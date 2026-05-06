@@ -446,6 +446,9 @@ function simplifyAllLines() {
 
   if (totalReduced > 0) {
     if (typeof updateConnectionGraph === 'function') updateConnectionGraph();
+    // Перестроить визуальные маркеры узлов: проходной узел исчез, его кружок
+    // должен пропасть с холста (раньше оставался «висеть»).
+    if (typeof rebuildNodeMarkers === 'function') rebuildNodeMarkers();
     if (typeof scheduleRender === 'function') scheduleRender();
     showNotification(`Объединено сегментов: ${totalReduced}`, 'success');
     // Аналогично splitAllLines (п.25): пересчитать после изменения графа,

@@ -487,32 +487,129 @@
   }
 
   // ==================== ТОЧКИ СВЯЗИ СЛОЁВ ====================
-  // crossLayerConnections: массив { x, y } — точки где все слои соединены в расчёте
+  // crossLayerConnections: массив { x, y, auto } — точки где все слои соединены
+  // в расчёте. auto=true — автоматически найдённая (endpoint касается линии
+  // другого слоя), auto=false — добавлена вручную через старый режим (теперь скрыт).
   var crossLayerConnections = [];
 
   function getCrossLayerConnections() { return crossLayerConnections; }
 
   function setCrossLayerConnections(data) {
-    crossLayerConnections = Array.isArray(data) ? data.map(function(p) { return { x: p.x, y: p.y }; }) : [];
+    crossLayerConnections = Array.isArray(data) ? data.map(function(p) {
+      return { x: p.x, y: p.y, auto: !!p.auto };
+    }) : [];
     _renderCrossLayerMarkers();
   }
 
-  function addCrossLayerConnection(x, y) {
+  // opts.auto = true — авто-добавление (тихо, без notification если уже есть).
+  // Без opts (или auto=false) — старый ручной toggle (скрыт от UI, но сохранён
+  // для обратной совместимости и legacy-точек).
+  function addCrossLayerConnection(x, y, opts) {
+    var auto = !!(opts && opts.auto);
     var snap = APP_CONFIG.SNAP_RADIUS || 10;
-    // Если уже есть близкая точка — убрать (toggle)
     var existing = crossLayerConnections.findIndex(function(p) {
       return Math.hypot(p.x - x, p.y - y) < snap;
     });
     if (existing !== -1) {
-      crossLayerConnections.splice(existing, 1);
-    } else {
-      crossLayerConnections.push({ x: x, y: y });
-      // Автоматически разбиваем все линии всех слоёв, проходящие через эту точку,
-      // чтобы в узле появился реальный endpoint — только тогда solver создаст общий узел
-      _splitLinesAtCrossPoint(x, y);
+      if (auto) return false; // авто: уже есть, ничего не делаем
+      // Ручной toggle — удаляем
+      var removed = crossLayerConnections.splice(existing, 1)[0];
+      _renderCrossLayerMarkers();
+      if (typeof showNotification === 'function') {
+        showNotification('Связь слоёв удалена (была ' + (removed.auto ? 'авто, жёлтая ★' : 'ручная, зелёная ★') + ')', 'info');
+      }
+      if (typeof saveToUndoStack === 'function') saveToUndoStack();
+      return true;
     }
+    crossLayerConnections.push({ x: x, y: y, auto: auto });
+    // Разбиваем все линии всех слоёв, проходящие через эту точку,
+    // чтобы в узле появился реальный endpoint — только тогда solver создаст
+    // общий узел.
+    _splitLinesAtCrossPoint(x, y);
     _renderCrossLayerMarkers();
+    if (typeof showNotification === 'function') {
+      showNotification('Слои соединены ' + (auto ? 'авто (жёлтая ★) в (' + Math.round(x) + ', ' + Math.round(y) + ')' : 'вручную (зелёная ★)'), 'info');
+    }
+    if (typeof saveToUndoStack === 'function' && !auto) saveToUndoStack();
+    return true;
+  }
+
+  // Удаление точки связи по координате — для клика на маркер ★.
+  function removeCrossLayerConnectionAt(x, y) {
+    var snap = APP_CONFIG.SNAP_RADIUS || 10;
+    var idx = crossLayerConnections.findIndex(function(p) {
+      return Math.hypot(p.x - x, p.y - y) < snap;
+    });
+    if (idx === -1) return false;
+    var removed = crossLayerConnections.splice(idx, 1)[0];
+    _renderCrossLayerMarkers();
+    if (typeof showNotification === 'function') {
+      showNotification('Связь слоёв удалена (была ' + (removed.auto ? 'авто, жёлтая ★' : 'ручная, зелёная ★') + ')', 'info');
+    }
     if (typeof saveToUndoStack === 'function') saveToUndoStack();
+    return true;
+  }
+
+  // ── АВТО-ДЕТЕКЦИЯ ─────────────────────────────────────────────────────
+  // Сканирует пары линий разных слоёв. Если endpoint линии слоя X лежит
+  // в пределах TOL=10px от линии слоя Y (Y ≠ X) — создаёт авто-cross-layer
+  // в этой точке. НЕ удаляет старые точки (q2 — до явной правки кликом).
+  // Дедуплицирует с уже имеющимися точками по тому же snap.
+  var _autoCrossDebounce = null;
+  function scheduleAutoCrossLayerRecompute() {
+    if (_autoCrossDebounce) clearTimeout(_autoCrossDebounce);
+    _autoCrossDebounce = setTimeout(function() {
+      _autoCrossDebounce = null;
+      try { recomputeAutoCrossLayerConnections(); }
+      catch (e) { console.warn('recomputeAutoCrossLayerConnections failed', e); }
+    }, 200);
+  }
+
+  function recomputeAutoCrossLayerConnections() {
+    if (typeof getCachedLines !== 'function' || typeof getLineAbsoluteEndpoints !== 'function' || typeof findClosestPointOnLine !== 'function') return 0;
+    var lines = getCachedLines().filter(function(l) { return l.visible !== false; });
+    var TOL = 10;
+    var added = 0;
+
+    for (var i = 0; i < lines.length; i++) {
+      var lA = lines[i];
+      var lidA = (lA.properties && lA.properties.layerId) || 'default';
+      var epA = getLineAbsoluteEndpoints(lA);
+      var aEndpoints = [{ x: epA.x1, y: epA.y1 }, { x: epA.x2, y: epA.y2 }];
+
+      for (var j = 0; j < lines.length; j++) {
+        if (i === j) continue;
+        var lB = lines[j];
+        var lidB = (lB.properties && lB.properties.layerId) || 'default';
+        if (lidA === lidB) continue;
+
+        for (var k = 0; k < aEndpoints.length; k++) {
+          var ep = aEndpoints[k];
+          var closest = findClosestPointOnLine(ep, lB);
+          if (!closest || closest.distance > TOL) continue;
+          // Endpoint lineA лежит на lineB. Создаём авто-точку в координатах endpoint.
+          // Дедуп: если уже есть cross-layer в этой точке (auto или manual) — пропуск.
+          var px = ep.x, py = ep.y;
+          var exists = crossLayerConnections.some(function(p) {
+            return Math.hypot(p.x - px, p.y - py) < TOL;
+          });
+          if (exists) continue;
+          crossLayerConnections.push({ x: px, y: py, auto: true });
+          added++;
+        }
+      }
+    }
+
+    if (added > 0) {
+      // После добавления авто-точек разрезаем линии в этих местах
+      var newAuto = crossLayerConnections.slice(-added);
+      newAuto.forEach(function(p) { _splitLinesAtCrossPoint(p.x, p.y); });
+      _renderCrossLayerMarkers();
+      if (typeof showNotification === 'function') {
+        showNotification('Авто-связь слоёв: ' + added + ' тчк (жёлтая ★)', 'info');
+      }
+    }
+    return added;
   }
 
   // Разбивает все линии (любого слоя), проходящие через точку (x,y), если там нет конечной точки
@@ -572,7 +669,7 @@
     return base + '@' + (layerId || 'default');
   }
 
-  // Рисует зелёные маркеры точек связи на canvas
+  // Рисует маркеры точек связи на canvas (зелёный=ручная, жёлтый=авто).
   function _renderCrossLayerMarkers() {
     if (typeof canvas === 'undefined' || !canvas) return;
     // Удалить старые
@@ -582,15 +679,32 @@
         canvas.remove(objs[i]);
       }
     }
-    // Добавить новые
     crossLayerConnections.forEach(function(p) {
       var r = 7;
+      // Цвет: жёлтый — авто (endpoint касается линии другого слоя),
+      //       зелёный — ручная (старые/legacy точки).
+      var fillColor = p.auto ? 'rgba(240,165,0,0.9)' : 'rgba(46,213,115,0.85)';
       var circle = new fabric.Circle({
-        left: p.x - r, top: p.y - r,
-        radius: r, fill: 'rgba(46,213,115,0.85)', stroke: '#fff',
+        left: p.x, top: p.y,
+        originX: 'center', originY: 'center',
+        radius: r, fill: fillColor, stroke: '#fff',
         strokeWidth: 1.5,
-        selectable: false, evented: false,
+        selectable: true, evented: true,
+        hoverCursor: 'pointer',
+        lockMovementX: true, lockMovementY: true,
+        lockScalingX: true, lockScalingY: true,
+        lockRotation: true,
+        hasControls: false, hasBorders: false,
         id: 'cross-layer-marker'
+      });
+      circle._crossX = p.x;
+      circle._crossY = p.y;
+      // Клик по маркеру удаляет точку — инструмент ручной правки (q2).
+      circle.on('mousedown', function() { circle._mdAt = Date.now(); });
+      circle.on('mouseup', function() {
+        if (Date.now() - (circle._mdAt || 0) < 400) {
+          removeCrossLayerConnectionAt(circle._crossX, circle._crossY);
+        }
       });
       var label = new fabric.Text('\u2605', {   // ★
         left: p.x, top: p.y,
@@ -632,7 +746,10 @@
   global.getCrossLayerConnections = getCrossLayerConnections;
   global.setCrossLayerConnections = setCrossLayerConnections;
   global.addCrossLayerConnection = addCrossLayerConnection;
+  global.removeCrossLayerConnectionAt = removeCrossLayerConnectionAt;
   global.isCrossLayerPoint = isCrossLayerPoint;
   global.refreshCrossLayerMarkers = refreshCrossLayerMarkers;
+  global.recomputeAutoCrossLayerConnections = recomputeAutoCrossLayerConnections;
+  global.scheduleAutoCrossLayerRecompute = scheduleAutoCrossLayerRecompute;
 
 })(window);

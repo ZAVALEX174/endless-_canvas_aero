@@ -105,6 +105,15 @@ document.addEventListener('DOMContentLoaded', () => {
   if (typeof initTooltips === 'function') initTooltips();
   if (typeof applyCanvasTheme === 'function') applyCanvasTheme();
 
+  // Информация о цветах маркеров связи слоёв (раз за сессию).
+  // Журнал хранит сообщения, поэтому даже если юзер закроет уведомление,
+  // оно останется в Журнале как справка.
+  setTimeout(function() {
+    if (typeof showNotification === 'function') {
+      showNotification('Связь слоёв: жёлтая ★ — авто (endpoint касается линии другого слоя), зелёная ★ — ручная. Клик по ★ удаляет связь.', 'info');
+    }
+  }, 800);
+
   // Проверка автосохранения
   if (hasAutoSave()) {
     var saveTime = getAutoSaveTime();

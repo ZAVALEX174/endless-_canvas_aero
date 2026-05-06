@@ -135,6 +135,46 @@ function createIntersectionPoint(x, y, index, data, color = '#ff4757') {
   return circle;
 }
 
+// Очищает старые маркеры узлов и пересоздаёт их по текущим endpoints линий.
+// Вызывается после simplifyAllLines (там слился узел, маркер должен исчезнуть)
+// и в любой другой ситуации, когда геометрия изменилась без вызова splitAllLines.
+function rebuildNodeMarkers() {
+  clearIntersectionPoints();
+  const allLayers = typeof getLayers === 'function' ? getLayers() : [{ id: 'default', visible: true }];
+  const targetLayerIds = allLayers
+    .filter(l => l.visible !== false)
+    .map(l => l.id);
+  if (!targetLayerIds.length) targetLayerIds.push('default');
+
+  const nodeMap = new Map();
+  getCachedLines().forEach(line => {
+    const lid = (line.properties && line.properties.layerId) || 'default';
+    if (!targetLayerIds.includes(lid)) return;
+    const ep = getLineAbsoluteEndpoints(line);
+    [{ x: ep.x1, y: ep.y1 }, { x: ep.x2, y: ep.y2 }].forEach(p => {
+      const key = getPointKey(p.x, p.y) + '@' + lid;
+      const ex = nodeMap.get(key);
+      if (ex) ex.degree++;
+      else nodeMap.set(key, { x: p.x, y: p.y, degree: 1, layerId: lid });
+    });
+  });
+
+  const visualized = new Set();
+  let vizIdx = 0;
+  const visList = [];
+  nodeMap.forEach(node => {
+    const visKey = roundTo5(node.x) + '_' + roundTo5(node.y);
+    if (visualized.has(visKey)) return;
+    visualized.add(visKey);
+    const color = node.degree === 1 ? '#3498db' : '#ff4757';
+    const data = { x: node.x, y: node.y, degree: node.degree, layerId: node.layerId };
+    createIntersectionPoint(node.x, node.y, vizIdx++, data, color);
+    visList.push(data);
+  });
+  intersectionPoints = visList;
+  scheduleRender();
+}
+
 function clearIntersectionPoints() {
   const objects = canvas.getObjects();
   for (let i = objects.length - 1; i >= 0; i--) {
@@ -489,5 +529,6 @@ window.clearIntersectionPoints = clearIntersectionPoints;
 window.bringIntersectionPointsToFront = bringIntersectionPointsToFront;
 window.splitAllLines = splitAllLines;
 window.splitLineAtPoint = splitLineAtPoint;
+window.rebuildNodeMarkers = rebuildNodeMarkers;
 
 })();

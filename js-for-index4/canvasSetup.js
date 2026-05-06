@@ -580,6 +580,8 @@ function handleObjectAdded(e) {
     obj.lockRotation = true;
     obj.lockScalingX = true;
     obj.lockScalingY = true;
+    // Авто-cross-layer: после добавления новой линии пересчитываем точки касания
+    if (typeof scheduleAutoCrossLayerRecompute === 'function') scheduleAutoCrossLayerRecompute();
   }
   if (obj && obj.id !== 'intersection-point' && obj.id !== 'intersection-point-label' && obj.id !== 'air-volume-text') {
     invalidateCache();
@@ -598,13 +600,17 @@ function handleObjectModified(e) {
     createOrUpdateAirVolumeText(obj);
     invalidateCache();
     updateConnectionGraph();
+    if (typeof scheduleAutoCrossLayerRecompute === 'function') scheduleAutoCrossLayerRecompute();
   }
   if (typeof debouncedAutoSave === 'function') debouncedAutoSave();
 }
 
 function handleObjectRemoved(e) {
   const obj = e.target;
-  if (obj && obj.type === 'line') removeAirVolumeText(obj);
+  if (obj && obj.type === 'line') {
+    removeAirVolumeText(obj);
+    if (typeof scheduleAutoCrossLayerRecompute === 'function') scheduleAutoCrossLayerRecompute();
+  }
   invalidateCache();
   updateConnectionGraph();
   if (typeof debouncedAutoSave === 'function') debouncedAutoSave();
