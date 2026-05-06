@@ -277,7 +277,11 @@ function handleCanvasMouseDown(e) {
     return;
   }
 
-  if (currentImageData && !isDrawingLine && e.e.button === 0 && (!e.target || e.target.id === 'grid-group' || e.target.type === 'text')) {
+  // Размещение объекта (фан/клапан/атмосфера/...) при активном placement mode.
+  // Разрешаем клик ВЕЗДЕ кроме как поверх другого изображения (image) — иначе
+  // юзер не может поставить фан на линию: e.target = line / circle-узел.
+  // addImageAtPosition сам сделает snap к ближайшей линии (≤35 px).
+  if (currentImageData && !isDrawingLine && e.e.button === 0 && (!e.target || e.target.type !== 'image')) {
     addImageAtPosition(pointer.x, pointer.y);
     currentImageData = null;
     const activeItems = document.querySelectorAll('.image-item.active');
@@ -760,6 +764,23 @@ function extendSetupCanvasEvents() {
 
   canvas.on('object:moving', e => {
     const obj = e.target;
+    // п.2: Вентилятор может находиться ТОЛЬКО на линии. При перетаскивании
+    // снапим к ближайшей линии (≤35 px). Если линий рядом нет — запоминаем
+    // origPos (на mouse:down) и в object:modified возвращаем фан туда.
+    if (obj.type === 'image' && obj.properties && obj.properties.type === 'fan') {
+      if (obj._fanDragOrigLeft === undefined) {
+        obj._fanDragOrigLeft = obj.left;
+        obj._fanDragOrigTop = obj.top;
+      }
+      const SNAP = 35;
+      const hits = (typeof findLinesInArea === 'function') ? findLinesInArea(obj.left, obj.top, SNAP) : [];
+      if (hits.length) {
+        obj.set({ left: hits[0].point.x, top: hits[0].point.y });
+        obj.setCoords();
+      }
+      // Если линий нет — позволяем визуально двигать, но в object:modified вернём
+      return;
+    }
     if (obj.type === 'line') {
       if (!lineDragState.active) {
         if (lineDragState.pending && lineDragState.pendingLine === obj) {
@@ -901,6 +922,33 @@ function extendSetupCanvasEvents() {
 
   canvas.on('object:modified', e => {
     const obj = e.target;
+    // п.2: на drop фана — финальная проверка. Если он не на линии в пределах
+    // 35 px, возвращаем на origPos (захваченную в object:moving).
+    if (obj.type === 'image' && obj.properties && obj.properties.type === 'fan') {
+      const SNAP = 35;
+      const hits = (typeof findLinesInArea === 'function') ? findLinesInArea(obj.left, obj.top, SNAP) : [];
+      if (!hits.length) {
+        if (obj._fanDragOrigLeft !== undefined) {
+          obj.set({ left: obj._fanDragOrigLeft, top: obj._fanDragOrigTop });
+          obj.setCoords();
+          if (typeof showNotification === 'function') {
+            showNotification('Вентилятор должен быть на линии — возврат на исходную позицию', 'warning');
+          }
+        }
+      } else {
+        // Финальный snap к линии
+        obj.set({ left: hits[0].point.x, top: hits[0].point.y });
+        obj.setCoords();
+      }
+      delete obj._fanDragOrigLeft;
+      delete obj._fanDragOrigTop;
+      if (typeof invalidateCache === 'function') invalidateCache();
+      if (typeof updateConnectionGraph === 'function') updateConnectionGraph();
+      if (typeof calculateAirFlowsSafe === 'function') {
+        setTimeout(() => calculateAirFlowsSafe(), 80);
+      }
+      return;
+    }
     if (obj.type === 'line') {
       lineDragState.active = false;
       invalidateCache();

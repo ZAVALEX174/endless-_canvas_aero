@@ -378,14 +378,11 @@ function _getFanObjects() {
 }
 
 function _startFanCanvasAnimation() {
-  if (_fanAnimId) return; // уже запущена
-  function step() {
-    _fanAngle = (_fanAngle + 4) % 360;
-    _getFanObjects().forEach(function(fan) { fan.set('angle', _fanAngle); });
-    if (canvas) canvas.requestRenderAll();
-    _fanAnimId = fabric.util.requestAnimFrame(step);
-  }
-  _fanAnimId = fabric.util.requestAnimFrame(step);
+  // п.4: вращение вентилятора убрано полностью — функционал отключён.
+  // Анимация лопастей через fan.set('angle') обходила lockRotation
+  // и пользователь явно попросил это убрать. Оставляем функцию-заглушку,
+  // чтобы внешние вызовы не падали.
+  return;
 }
 
 function _stopFanCanvasAnimation() {

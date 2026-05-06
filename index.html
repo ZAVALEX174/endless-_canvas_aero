@@ -100,7 +100,9 @@
 
       <!-- Группа 3: Расчёт, Анализ, Сброс, Анимация вентиляторов -->
       <div class="toolbar-group">
-        <button class="toolbar-btn" id="fanAnimationBtn" data-tooltip="Анимация вентиляторов / Реверс" onclick="toggleFanAnimationAndReverse()">
+        <!-- п.4: вращение вентилятора убрано — кнопка скрыта.
+             Реверс теперь меняется только через свойства самого фана (модалка). -->
+        <button class="toolbar-btn" id="fanAnimationBtn" data-tooltip="Анимация вентиляторов / Реверс" onclick="toggleFanAnimationAndReverse()" style="display:none;">
           <svg viewBox="0 0 18 18" fill="currentColor" stroke="none">
             <circle cx="9" cy="9" r="7.5" fill="none" stroke="currentColor" stroke-width="1.2"/>
             <circle cx="9" cy="9" r="1.4"/>

@@ -125,11 +125,19 @@ function createOrUpdateAirVolumeText(line) {
   const startNode = p.startNode || '';
   let directionArrow = '→';
   if (startNode) {
+    // ВАЖНО: после airSolver writeFlowResults startNode имеет вид "x_y@layerId",
+    // а getPointKey возвращает только "x_y" (без слоя). Срезаем суффикс,
+    // иначе сравнение всегда false и стрелка остаётся в направлении РИСОВАНИЯ
+    // даже когда поток после расчёта идёт в обратную сторону.
+    const startNodeXY = startNode.split('@')[0];
     const k2 = getPointKey(endpoints.x2, endpoints.y2);
-    if (startNode === k2) directionArrow = '←';
+    if (startNodeXY === k2) directionArrow = '←';
   }
 
-  // Формирование надписи согласно пользовательским настройкам
+  // Формирование надписи согласно пользовательским настройкам.
+  // Когда включено несколько полей (Q + R + v) — выводим их СТОЛБЦОМ
+  // (через \n), а не в строку: иначе текст растягивается вдоль линии и
+  // сливается с соседними подписями.
   const opts = global.lineLabelOptions || { showQ: true, showR: false, showV: false, fontSize: 12 };
   const parts = [];
   if (opts.showQ) parts.push(`${directionArrow} ${Math.abs(q).toFixed(3)} м³/с`);
@@ -142,15 +150,26 @@ function createOrUpdateAirVolumeText(line) {
     if (!isNaN(v)) parts.push(`v=${v.toFixed(2)} м/с`);
   }
   if (!parts.length) parts.push(`${directionArrow} ${Math.abs(q).toFixed(3)} м³/с`);
-  const labelText = parts.join('  ');
+  const labelText = parts.join('\n');
+
+  // п.3: цвет стрелки отражает состояние струи —
+  //   свежая (от вентилятора-источника до загрязнителя)  → красный
+  //   загрязнённая (после загрязнителя)                   → синий
+  // Состояние выставляет applyFlowColoring через line._flowColorState.
+  // Для линий без расчёта/без источника — дефолтный цвет из CSS-переменной.
+  let textFill = (typeof getCV === 'function' ? getCV('--canvas-text-fill') : '#E8E9F5') || '#E8E9F5';
+  if (line._flowColorState === 'fresh') textFill = FLOW_FRESH_COLOR;
+  else if (line._flowColorState === 'contaminated') textFill = FLOW_CONTAMINATED_COLOR;
 
   const text = new fabric.Text(labelText, {
     left: midX + offsetX,
     top: midY + offsetY,
     fontSize: opts.fontSize || 12,
     fontFamily: 'Arial',
-    fill: (typeof getCV === 'function' ? getCV('--canvas-text-fill') : '#E8E9F5') || '#E8E9F5',
+    fill: textFill,
     fontWeight: 'bold',
+    textAlign: 'center',
+    lineHeight: 1.1,
     textBackgroundColor: (typeof getCV === 'function' ? getCV('--canvas-text-bg') : 'rgba(18,19,26,0.85)') || 'rgba(18,19,26,0.85)',
     padding: 4,
     selectable: false,
@@ -172,7 +191,18 @@ function createOrUpdateAirVolumeText(line) {
 function updateAllAirVolumeTexts() {
   if (updateTextsTimeout) clearTimeout(updateTextsTimeout);
   updateTextsTimeout = setTimeout(() => {
+    // ВАЖНО: сначала собираем ВСЕ orphan-тексты с холста и удаляем — иначе
+    // после split/reload/auto-recalc остаются дубликаты ("→ 0.000 → 100.000"
+    // друг на друге). createOrUpdateAirVolumeText удаляет только по
+    // line.airVolumeText reference, который теряется при пересоздании линий.
+    const stale = canvas.getObjects().filter(o => o.id === 'air-volume-text');
+    if (stale.length) {
+      stale.forEach(o => canvas.remove(o));
+    }
+    // Сбрасываем ссылки на линиях — все тексты будут пересозданы ниже.
     const lines = getCachedLines();
+    lines.forEach(l => { if (l.airVolumeText) l.airVolumeText = null; });
+
     for (let line of lines) {
       if (line.properties && line.properties.airVolume !== undefined) {
         createOrUpdateAirVolumeText(line);
@@ -318,8 +348,15 @@ function clearFlowColoring() {
       delete line._originalStrokeForFlow;
       restored++;
     }
+    // п.3: сбрасываем цвет стрелки тоже — иначе текст останется красным/синим
+    if (line._flowColorState !== undefined) {
+      delete line._flowColorState;
+    }
   });
-  if (restored) canvas.renderAll();
+  if (restored) {
+    if (typeof updateAllAirVolumeTexts === 'function') updateAllAirVolumeTexts();
+    canvas.renderAll();
+  }
   return restored;
 }
 
@@ -444,13 +481,18 @@ function applyFlowColoring(calculationResult) {
     }
     if (state === 'fresh') {
       line.set('stroke', FLOW_FRESH_COLOR);
+      line._flowColorState = 'fresh';
       freshCount++;
     } else {
       line.set('stroke', FLOW_CONTAMINATED_COLOR);
+      line._flowColorState = 'contaminated';
       contaminatedCount++;
     }
   });
 
+  // п.3: после смены состояния перерисовываем тексты, чтобы цвет стрелки
+  // соответствовал состоянию линии (свежая красная / загрязнённая синяя).
+  if (typeof updateAllAirVolumeTexts === 'function') updateAllAirVolumeTexts();
   canvas.renderAll();
   return { painted: edgeState.size, fresh: freshCount, contaminated: contaminatedCount };
 }
