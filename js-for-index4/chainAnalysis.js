@@ -198,6 +198,59 @@ function showAirVolumeReport() {
   ]);
 }
 
+// ── Журнал уведомлений ────────────────────────────────────────────────
+// Показывает полную историю показанных уведомлений с timestamp и типом.
+// Пользователь явно попросил, чтобы оповещения не скрывались автоматом —
+// здесь можно посмотреть всё, что когда-либо появлялось, даже после ×.
+function showNotificationLogModal() {
+  const log = (typeof getNotificationLog === 'function' ? getNotificationLog() : (window.notificationLog || []));
+  const sorted = log.slice().reverse(); // свежие сверху
+  const fmtTs = (ts) => {
+    const d = new Date(ts);
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  };
+  const typeColor = {
+    success: 'var(--color-airflow,#2ecc71)',
+    error:   'var(--color-fire,#e74c3c)',
+    info:    'var(--color-accent,#4f9aff)',
+    warning: 'var(--color-fan,#f0a500)'
+  };
+  let html = '<div class="property-group">';
+  html += `<p style="margin:0 0 8px 0; font-size:12px; color:var(--color-text-secondary,#888);">Всего записей: ${log.length}. Свежие сверху. Журнал не очищается автоматически — нажмите «Очистить журнал», когда хотите начать с чистого листа.</p>`;
+  if (!log.length) {
+    html += '<p style="color:var(--color-text-secondary,#888); font-style:italic;">Журнал пуст.</p>';
+  } else {
+    html += '<div style="max-height:60vh; overflow:auto;">';
+    html += '<table style="width:100%; border-collapse:collapse; font-size:12px;">';
+    html += '<tr><th style="text-align:left; padding:4px 8px; border-bottom:1px solid var(--color-border,#333);">Время</th>';
+    html += '<th style="text-align:left; padding:4px 8px; border-bottom:1px solid var(--color-border,#333);">Тип</th>';
+    html += '<th style="text-align:left; padding:4px 8px; border-bottom:1px solid var(--color-border,#333);">Сообщение</th></tr>';
+    sorted.forEach(entry => {
+      const c = typeColor[entry.type] || typeColor.info;
+      html += `<tr>`;
+      html += `<td style="padding:4px 8px; vertical-align:top; white-space:nowrap; color:var(--color-text-secondary,#888);">${escapeHtml(fmtTs(entry.ts))}</td>`;
+      html += `<td style="padding:4px 8px; vertical-align:top;"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${c}; margin-right:6px;"></span>${escapeHtml(entry.type)}</td>`;
+      html += `<td style="padding:4px 8px;">${escapeHtml(entry.msg)}</td>`;
+      html += `</tr>`;
+    });
+    html += '</table></div>';
+  }
+  html += '</div>';
+  createModal('notificationLogModal', 'Журнал уведомлений', html, [
+    {
+      text: 'Очистить журнал',
+      class: 'btn-danger',
+      onClick: 'clearNotificationLog(); document.getElementById("notificationLogModal").style.display="none"; showNotification("Журнал очищен", "info");'
+    },
+    {
+      text: 'Закрыть все на экране',
+      class: 'btn-secondary',
+      onClick: 'dismissAllNotifications(); document.getElementById("notificationLogModal").style.display="none";'
+    }
+  ]);
+}
+
 // Найти кандидатов для объединения в одном слое:
 // промежуточные узлы степени 2, без объектов, с коллинеарными сегментами
 // и совпадающими гидравлическими свойствами.
@@ -619,6 +672,7 @@ global.showChainSummary = showChainSummary;
 global.showAllChainsSummary = showAllChainsSummary;
 global.analyzeSelectedChain = analyzeSelectedChain;
 global.showAirVolumeReport = showAirVolumeReport;
+global.showNotificationLogModal = showNotificationLogModal;
 global.splitAllLinesAtObjectCenters = splitAllLinesAtObjectCenters;
 global.simplifyAllLines = simplifyAllLines;
 global.calculateAllPropertiesForAllLines = calculateAllPropertiesForAllLines;

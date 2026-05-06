@@ -31,23 +31,82 @@
     };
   }
 
+  // ── Журнал уведомлений ────────────────────────────────────────────────
+  // Хранит ВСЕ показанные уведомления с timestamp до явной очистки.
+  // Доступ через global.getNotificationLog / global.clearNotificationLog
+  // и UI — кнопка «Журнал» в тулбаре (см. modals.js / index.html).
+  if (!global.notificationLog) global.notificationLog = [];
+  const NOTIF_LOG_LIMIT = 500; // защита от взрывного роста — старые скидываем
+
   function showNotification(msg, type, duration) {
     type = type || 'info';
-    duration = duration || 3000;
+    // duration больше не используется для авто-скрытия — пользователь явно
+    // попросил оставлять уведомления видимыми до ручного закрытия (×).
+    // Параметр сохранён в сигнатуре для обратной совместимости.
+
+    // 1) Логируем независимо от наличия контейнера
+    try {
+      global.notificationLog.push({ ts: Date.now(), msg: String(msg), type: String(type) });
+      if (global.notificationLog.length > NOTIF_LOG_LIMIT) {
+        global.notificationLog.splice(0, global.notificationLog.length - NOTIF_LOG_LIMIT);
+      }
+      // Инкрементируем счётчик-бейдж на кнопке журнала, если она есть
+      const badge = document.getElementById('notificationLogBadge');
+      if (badge) {
+        const n = (parseInt(badge.textContent, 10) || 0) + 1;
+        badge.textContent = String(n);
+        badge.style.display = 'inline-block';
+      }
+    } catch (e) { /* ignore */ }
+
     const container = document.getElementById('notificationContainer');
     if (!container) return;
+
+    // 2) Создаём блок: текст + крестик закрытия. БЕЗ таймера авто-скрытия —
+    // удаление только по клику на ×.
     const notif = document.createElement('div');
-    notif.textContent = msg;
     notif.className = 'notification ' + type;
-    notif.style.cssText = 'display:block; opacity:1; margin-bottom:6px;';
-    container.appendChild(notif);
-    setTimeout(() => {
-      notif.style.transition = 'opacity 0.3s';
+    notif.style.cssText = 'display:flex; align-items:flex-start; gap:8px; opacity:1;';
+
+    const text = document.createElement('div');
+    text.className = 'notification-message';
+    text.textContent = String(msg);
+    text.style.flex = '1';
+
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.setAttribute('aria-label', 'Закрыть');
+    closeBtn.textContent = '×';
+    closeBtn.style.cssText = [
+      'background:none', 'border:none', 'cursor:pointer',
+      'color:var(--color-text-secondary,#888)', 'font-size:18px',
+      'line-height:1', 'padding:0 2px', 'margin-left:4px', 'flex-shrink:0'
+    ].join(';');
+    closeBtn.addEventListener('click', function() {
+      notif.style.transition = 'opacity 0.2s';
       notif.style.opacity = '0';
-      setTimeout(() => {
-        if (notif.parentNode) notif.parentNode.removeChild(notif);
-      }, 320);
-    }, duration);
+      setTimeout(() => { if (notif.parentNode) notif.parentNode.removeChild(notif); }, 220);
+    });
+
+    notif.appendChild(text);
+    notif.appendChild(closeBtn);
+    container.appendChild(notif);
+  }
+
+  function getNotificationLog() {
+    return (global.notificationLog || []).slice();
+  }
+
+  function clearNotificationLog() {
+    global.notificationLog = [];
+    const badge = document.getElementById('notificationLogBadge');
+    if (badge) { badge.textContent = '0'; badge.style.display = 'none'; }
+  }
+
+  function dismissAllNotifications() {
+    const container = document.getElementById('notificationContainer');
+    if (!container) return;
+    while (container.firstChild) container.removeChild(container.firstChild);
   }
 
   function getPointKey(x, y) {
@@ -88,6 +147,9 @@
   global.debounce = debounce;
   global.throttle = throttle;
   global.showNotification = showNotification;
+  global.getNotificationLog = getNotificationLog;
+  global.clearNotificationLog = clearNotificationLog;
+  global.dismissAllNotifications = dismissAllNotifications;
   global.getPointKey = getPointKey;
   global.escapeHtml = escapeHtml;
   global.safeAssetUrl = safeAssetUrl;

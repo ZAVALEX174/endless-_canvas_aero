@@ -8,8 +8,9 @@
   <script src="./js/fabric-min.js"></script>
   <script src="./js/vendor/jspdf.umd.min.js"></script>
   <script src="./js/vendor/html2canvas.min.js"></script>
-  <script src="./js/vendor/three.min.js"></script>
-  <script src="./js/vendor/OrbitControls.js"></script>
+  <!-- п.5: three.js / OrbitControls временно не грузим — 3D отключён -->
+  <!-- <script src="./js/vendor/three.min.js"></script> -->
+  <!-- <script src="./js/vendor/OrbitControls.js"></script> -->
 
   <!-- CSS — порядок загрузки важен -->
   <link rel="stylesheet" href="./styles/variables.css">
@@ -239,6 +240,7 @@
       <button class="context-btn" id="checkConnectionsBtn" data-tooltip="Проверить связи линий (подсветить висящие точки)" onclick="checkDanglingConnections()">Проверка связей</button>
       <button class="context-btn" id="cleanupGhostBtn" data-tooltip="Удалить микро-линии и дубли (огрызки после сплитов)" onclick="cleanupGhostLinesUI()">Очистить мусор</button>
       <button class="context-btn" id="flowColoringBtn" data-tooltip="Раскрасить струю: свежая — красная, исходящая (после загрязнителя/пожара) — синяя" onclick="toggleFlowColoring()">Струя</button>
+      <button class="context-btn" id="notificationLogBtn" data-tooltip="Журнал уведомлений (полная история, пока не очищена вручную)" onclick="showNotificationLogModal()">Журнал<span id="notificationLogBadge">0</span></button>
 
       <span class="context-separator"></span>
 
@@ -253,7 +255,8 @@
 
       <button class="context-btn" data-tooltip="Добавить изображение" onclick="showAddImageModal()">+ Объект</button>
       <button class="context-btn" data-tooltip="Загрузить схему" onclick="loadDrawing()">Загрузить</button>
-      <button class="context-btn" data-tooltip="3D-вид шахты" onclick="open3DView()">3D-вид</button>
+      <!-- п.5: 3D-вид временно отключён по запросу заказчика -->
+      <button class="context-btn" data-tooltip="3D-вид шахты" onclick="open3DView()" style="display:none;">3D-вид</button>
       <button class="context-btn btn-danger" data-tooltip="Очистить холст" onclick="clearCanvas()" style="border-color:var(--color-fire);color:var(--color-fire);">Очистить</button>
     </div>
 
@@ -930,7 +933,10 @@
   <script src="js-for-index4/csvExport.js"></script>
   <script src="js-for-index4/pdfExport.js"></script>
   <script src="js-for-index4/testExport.js"></script>
-  <script src="js-for-index4/view3d.js"></script>
+  <!-- п.5: view3d.js временно не грузим — 3D отключён -->
+  <!-- <script src="js-for-index4/view3d.js"></script> -->
+  <!-- Заглушки чтобы onclick="open3DView()" не падал при случайном вызове -->
+  <script>window.open3DView = function() {}; window.close3DView = function() {};</script>
 </body>
 
 </html>
