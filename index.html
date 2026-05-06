@@ -398,7 +398,7 @@
         <h2 class="modal-title">Свойства линии</h2>
         <button class="close-modal" onclick="closeLinePropertiesModal()">&times;</button>
       </div>
-      <form id="linePropertiesForm" class="modal-form modal-form--vertical">
+      <form id="linePropertiesForm" class="modal-form modal-form--vertical" novalidate>
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">Название:</label>
@@ -550,7 +550,11 @@
         <h2 class="modal-title">Свойства объекта</h2>
         <button class="close-modal" onclick="closeObjectPropertiesModal()">&times;</button>
       </div>
-      <form id="objectPropertiesForm" class="modal-form">
+      <!-- novalidate: блокировал submit при скрытых number-полях (objPropertyX/Y и т.п.).
+           Браузер выдавал «invalid form control … is not focusable» и прерывал
+           submit — кнопка «Сохранить» переставала срабатывать. Вся валидация
+           идёт в applyObjectProperties() на JS, HTML5-проверка тут не нужна. -->
+      <form id="objectPropertiesForm" class="modal-form" novalidate>
         <div class="form-row">
           <div class="form-group" style="flex:2">
             <label class="form-label">Название:</label>
@@ -760,7 +764,7 @@
         <h2 class="modal-title">Добавить изображение</h2>
         <button class="close-modal" onclick="closeAddImageModal()">&times;</button>
       </div>
-      <form id="addImageForm" class="modal-form">
+      <form id="addImageForm" class="modal-form" novalidate>
         <div class="form-group">
           <label class="form-label">URL изображения:</label>
           <input type="url" id="newImageUrl" placeholder="https://example.com/image.png">
