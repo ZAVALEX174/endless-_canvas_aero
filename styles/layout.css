@@ -177,6 +177,7 @@ input.zoom-level:hover, input.zoom-level:focus {
   padding: 0 8px;
   gap: 4px;
   background: var(--color-context-bar, var(--color-panel));
+  -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   border-bottom: 1px solid var(--color-border-light);
   z-index: 80;

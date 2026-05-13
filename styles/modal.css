@@ -8,6 +8,8 @@
   width: 100%;
   height: 100%;
   background: rgba(0, 0, 0, 0.6);
+  /* Safari <15.4 требует -webkit- префикс. Без него блюр не работает на macOS. */
+  -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
   z-index: 1000;
   align-items: center;

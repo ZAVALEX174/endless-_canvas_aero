@@ -61,6 +61,12 @@ function setupKeyboardShortcuts() {
           updatePropertiesPanel();
           if (typeof invalidateCache === 'function') invalidateCache();
           if (typeof updateConnectionGraph === 'function') updateConnectionGraph();
+          // п.5 (2026-05-13): пересоздаём визуальные маркеры узлов и подписи
+          // расходов по фактическому набору линий. Иначе кружки/номера/подписи
+          // от удалённых ветвей висят как мусор, и юзер потом думает, что
+          // «Упростить» не работает.
+          if (typeof rebuildNodeMarkers === 'function') rebuildNodeMarkers();
+          if (typeof updateAllAirVolumeTexts === 'function') updateAllAirVolumeTexts();
           // Авто-пересчёт после массового удаления
           if (typeof calculateAirFlowsSafe === 'function') {
             setTimeout(() => calculateAirFlowsSafe(), 80);
@@ -83,6 +89,13 @@ function setupKeyboardShortcuts() {
         canvas.remove(active);
         canvas.renderAll();
         updatePropertiesPanel();
+        // п.5: тот же cleanup что и для group-delete — иначе orphan-маркеры
+        // остаются на холсте, и юзер видит «грязь» которая выглядит как
+        // несработавший «Упростить».
+        if (typeof invalidateCache === 'function') invalidateCache();
+        if (typeof updateConnectionGraph === 'function') updateConnectionGraph();
+        if (typeof rebuildNodeMarkers === 'function') rebuildNodeMarkers();
+        if (typeof updateAllAirVolumeTexts === 'function') updateAllAirVolumeTexts();
         // Авто-пересчёт после одиночного удаления (линия / объект)
         if (typeof calculateAirFlowsSafe === 'function') {
           setTimeout(() => calculateAirFlowsSafe(), 80);
@@ -177,6 +190,15 @@ function setupKeyboardShortcuts() {
       spacePressed = false;
       if (canvas && !currentImageData) canvas.defaultCursor = 'default';
     }
+  });
+  // 2026-05-13: сбрасываем spacePressed/altKeyPressed при потере фокуса окна.
+  // Без этого если юзер удерживал Space и переключился на другую вкладку,
+  // keyup до нас не дойдёт и spacePressed застрянет в true — следующий клик
+  // по холсту начнёт pan вместо выделения объекта.
+  window.addEventListener('blur', function() {
+    spacePressed = false;
+    altKeyPressed = false;
+    if (canvas && !currentImageData) canvas.defaultCursor = 'default';
   });
   document.addEventListener('click', hideContextMenu);
 }

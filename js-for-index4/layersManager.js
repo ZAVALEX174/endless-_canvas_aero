@@ -260,7 +260,11 @@
         'border-bottom:1px solid var(--color-border-light);',
         'border-left:3px solid ' + (isActive ? 'var(--color-accent,#4a9eff)' : 'transparent') + ';',
         'background:' + (isActive ? 'var(--color-accent-bg,rgba(74,158,255,0.10))' : 'transparent') + ';',
-        'border-radius:4px;transition:background 0.15s;cursor:pointer;'
+        'border-radius:4px;transition:background 0.15s;cursor:pointer;',
+        // п.7: min-width:0 обязателен — иначе flex-контейнер не даёт детям
+        // сжиматься меньше их min-content, и строка вылезает за правый край
+        // панели слоёв (особенно заметно на macOS с native number-input).
+        'min-width:0;max-width:100%;box-sizing:border-box;'
       ].join('');
       item.title = 'Кликните, чтобы выбрать активный слой';
 
@@ -356,7 +360,9 @@
       var nameSpan = document.createElement('span');
       nameSpan.textContent = layer.name;
       nameSpan.style.cssText = [
-        'flex:1;font-size:11px;color:var(--color-text-primary);',
+        // flex:1 1 0 (явно с min-width:0) — span должен сжиматься до 0,
+        // иначе при длинном имени строка ломает ширину панели.
+        'flex:1 1 0;min-width:0;font-size:11px;color:var(--color-text-primary);',
         'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;',
         'cursor:' + (layer.locked ? 'default' : 'pointer') + ';'
       ].join('');

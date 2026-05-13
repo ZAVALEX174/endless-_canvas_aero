@@ -444,20 +444,34 @@ function simplifyAllLines() {
     totalReduced += mergedThisPass;
   }
 
+  // Сколько линий осталось — нужно для информативного уведомления.
+  const linesAfter = (typeof getCachedLines === 'function') ? getCachedLines().length : 0;
+  const linesBefore = linesAfter + totalReduced;
+
+  // ВАЖНО: rebuildNodeMarkers и updateAllAirVolumeTexts вызываем ВСЕГДА,
+  // даже если totalReduced=0. Иначе после Delete части схемы (а потом
+  // «Упростить» как safety-net) юзер видит мусорные кружки и подписи от
+  // удалённых ветвей и думает, что «Упростить» ничего не делает.
+  if (typeof updateConnectionGraph === 'function') updateConnectionGraph();
+  if (typeof rebuildNodeMarkers === 'function') rebuildNodeMarkers();
+  if (typeof updateAllAirVolumeTexts === 'function') updateAllAirVolumeTexts();
+  if (typeof scheduleRender === 'function') scheduleRender();
+
   if (totalReduced > 0) {
-    if (typeof updateConnectionGraph === 'function') updateConnectionGraph();
-    // Перестроить визуальные маркеры узлов: проходной узел исчез, его кружок
-    // должен пропасть с холста (раньше оставался «висеть»).
-    if (typeof rebuildNodeMarkers === 'function') rebuildNodeMarkers();
-    if (typeof scheduleRender === 'function') scheduleRender();
-    showNotification(`Объединено сегментов: ${totalReduced}`, 'success');
+    showNotification(
+      `Упростить: было ${linesBefore} линий → стало ${linesAfter} (объединено пар: ${totalReduced}). Мусорные маркеры узлов убраны.`,
+      'success'
+    );
     // Аналогично splitAllLines (п.25): пересчитать после изменения графа,
     // чтобы стрелки потоков и значения соответствовали новой топологии.
     if (typeof calculateAirFlowsSafe === 'function') {
       setTimeout(() => calculateAirFlowsSafe(), 60);
     }
   } else {
-    showNotification('Нет сегментов, которые можно объединить', 'info');
+    showNotification(
+      `Упростить: объединять нечего (${linesAfter} ${linesAfter === 1 ? 'линия' : 'линий'} — все ветви уже минимальные). Мусорные маркеры узлов убраны.`,
+      'info'
+    );
   }
 }
 

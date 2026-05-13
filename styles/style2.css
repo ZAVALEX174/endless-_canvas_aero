@@ -764,10 +764,13 @@ h1 {
   height: 6px;
   border-radius: 3px;
   background: #dee2e6;
+  /* Safari/старые WebKit без -webkit- рисуют нативный трек поверх кастомного фона. */
+  -webkit-appearance: none;
   appearance: none;
 }
 
 .modal-form input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
   appearance: none;
   width: 18px;
   height: 18px;

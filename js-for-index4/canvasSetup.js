@@ -229,6 +229,93 @@ function snapToGrid(value) {
   return Math.round(value / APP_CONFIG.GRID_SIZE) * APP_CONFIG.GRID_SIZE;
 }
 
+// ─── Snap-индикатор при рисовании линии ──────────────────────────────────
+// Визуальная подсказка «дотянулся ли до цели»: жёлто-зелёный кружок поверх
+// узла или точки на линии, когда курсор в радиусе snap'а. Работает на всех
+// ОС, т.к. рисуется через fabric.Circle на canvas — никаких CSS-курсоров.
+let _snapIndicator = null;
+const _SNAP_INDICATOR_RADIUS_NODE = 14;   // попадание в узел
+const _SNAP_INDICATOR_RADIUS_LINE = 9;    // попадание в линию (будет split)
+const _SNAP_INDICATOR_COLOR_NODE = '#2ecc71';  // зелёный — соединимся с существующим узлом
+const _SNAP_INDICATOR_COLOR_LINE = '#f1c40f';  // жёлтый — разрежем линию в этой точке
+
+function clearSnapIndicator() {
+  if (_snapIndicator && canvas) {
+    canvas.remove(_snapIndicator);
+    _snapIndicator = null;
+    if (typeof canvas.requestRenderAll === 'function') canvas.requestRenderAll();
+  }
+}
+
+function _showSnapIndicator(x, y, radius, color) {
+  if (!_snapIndicator) {
+    _snapIndicator = new fabric.Circle({
+      left: x, top: y,
+      originX: 'center', originY: 'center',
+      radius: radius,
+      fill: 'transparent',
+      stroke: color,
+      strokeWidth: 2.5,
+      selectable: false, evented: false,
+      hoverCursor: 'crosshair',
+      id: 'snap-indicator',
+      excludeFromExport: true,
+      isPreview: true
+    });
+    canvas.add(_snapIndicator);
+    _snapIndicator.bringToFront();
+  } else {
+    _snapIndicator.set({ left: x, top: y, radius: radius, stroke: color });
+    _snapIndicator.setCoords();
+    _snapIndicator.bringToFront();
+  }
+  canvas.requestRenderAll();
+}
+
+function updateSnapIndicator(pointer) {
+  // 1) приоритет: snap к существующему узлу сети (зелёный кружок)
+  const node = findNearestNetworkNode(pointer, 18);
+  if (node) {
+    _showSnapIndicator(node.x, node.y, _SNAP_INDICATOR_RADIUS_NODE, _SNAP_INDICATOR_COLOR_NODE);
+    return;
+  }
+  // 2) snap к точке на линии — попадёт в split (жёлтый кружок)
+  if (typeof findLinesInArea === 'function') {
+    const sx = snapToGrid(pointer.x);
+    const sy = snapToGrid(pointer.y);
+    const hits = findLinesInArea(sx, sy, 10);
+    if (hits && hits.length && hits[0].param > 0.05 && hits[0].param < 0.95) {
+      _showSnapIndicator(sx, sy, _SNAP_INDICATOR_RADIUS_LINE, _SNAP_INDICATOR_COLOR_LINE);
+      return;
+    }
+  }
+  clearSnapIndicator();
+}
+
+// Snap к ближайшему узлу сети при рисовании. Раньше grid-snap не попадал в
+// off-grid endpoints (после simplify/intersection узлы стоят в нецелых
+// координатах — напр. (725.24, 141.81)), и новая линия оставалась «висеть»
+// рядом, не подключаясь к узлу. Радиус 18 совпадает с NODE_ATTACH_THRESHOLD
+// в networkBuilder.js, чтобы поведение было консистентным.
+function findNearestNetworkNode(pointer, radius) {
+  const r = (typeof radius === 'number') ? radius : 18;
+  const nodes = window.connectionNodes;
+  if (!nodes || typeof nodes.forEach !== 'function') return null;
+  let best = null;
+  let bestD2 = r * r;
+  nodes.forEach(function(node) {
+    if (!node || typeof node.x !== 'number' || typeof node.y !== 'number') return;
+    const dx = pointer.x - node.x;
+    const dy = pointer.y - node.y;
+    const d2 = dx * dx + dy * dy;
+    if (d2 <= bestD2) {
+      bestD2 = d2;
+      best = node;
+    }
+  });
+  return best;
+}
+
 // ==================== СОБЫТИЯ CANVAS ====================
 function setupCanvasEvents() {
   canvas.on('mouse:down', handleCanvasMouseDown);
@@ -352,6 +439,48 @@ function handleLineDrawingStart(e, pointer) {
       }
     }
 
+    // Snap к существующему узлу сети — перебивает grid-snap, чтобы линия
+    // пристёгивалась к off-grid endpoint'ам (напр. после simplify).
+    let snapNode = null;
+    if (!startFromObject) {
+      snapNode = findNearestNetworkNode(pointer, 18);
+      if (snapNode) {
+        snappedX = snapNode.x;
+        snappedY = snapNode.y;
+      }
+    }
+
+    // 2026-05-13: snap к точке на линии (как в handleLineDrawingEnd).
+    // Симметрично snap-индикатору — если он показал жёлтое кольцо на линии,
+    // start-точка должна быть ровно там, и линия должна разрезаться,
+    // чтобы новая ветвь начиналась из узла-разреза. Без этого юзер видел
+    // индикатор «попадёшь на линию», но реально линия стартовала с grid-точки
+    // в стороне от неё.
+    if (!startFromObject && !snapNode && !altKeyPressed) {
+      const hits = (typeof findLinesInArea === 'function') ? findLinesInArea(snappedX, snappedY, 10) : null;
+      if (hits && hits.length && hits[0].param > 0.05 && hits[0].param < 0.95) {
+        const lineHit = hits[0];
+        const split = splitLineAtPoint(lineHit.line, { x: snappedX, y: snappedY });
+        if (split) {
+          saveToUndoStack();
+          canvas.remove(lineHit.line);
+          if (typeof removeAirVolumeText === 'function') removeAirVolumeText(lineHit.line);
+          canvas.add(split.line1);
+          canvas.add(split.line2);
+          if (typeof applyLayerColorToObject === 'function') {
+            applyLayerColorToObject(split.line1);
+            applyLayerColorToObject(split.line2);
+          }
+          if (typeof createOrUpdateAirVolumeText === 'function') {
+            createOrUpdateAirVolumeText(split.line1);
+            createOrUpdateAirVolumeText(split.line2);
+          }
+          // Координаты точки разреза — это и есть наш start, ничего пересчитывать
+          // не нужно (split возвращает line2.x1 === snappedX по построению).
+        }
+      }
+    }
+
     const node = isPointInLockedNode(snappedX, snappedY);
     if (node) {
       snappedX = node.node.x;
@@ -393,13 +522,25 @@ function handleLineDrawingEnd(e, pointer) {
     }
   }
 
+  // Snap к существующему узлу сети — см. комментарий в handleLineDrawingStart.
+  let snapNode = null;
+  if (!endFromObject) {
+    snapNode = findNearestNetworkNode(pointer, 18);
+    if (snapNode) {
+      snappedX = snapNode.x;
+      snappedY = snapNode.y;
+    }
+  }
+
   const node = isPointInLockedNode(snappedX, snappedY);
   if (node) {
     snappedX = node.node.x;
     snappedY = node.node.y;
   }
 
-  if (!altKeyPressed && !node) {
+  // Не пытаемся резать линию в точке, в которую уже произошёл snap к узлу —
+  // юзер хочет соединиться с существующим узлом, а не создать новый разрез.
+  if (!altKeyPressed && !node && !snapNode) {
     const lineHit = findLinesInArea(snappedX, snappedY, 10);
     if (lineHit.length && lineHit[0].param > 0.05 && lineHit[0].param < 0.95) {
       const split = splitLineAtPoint(lineHit[0].line, {
@@ -541,16 +682,30 @@ function handleCanvasMouseMove(e) {
     canvas.setViewportTransform(vpt);
     return;
   }
-  if (!isDrawingLine || !lineStartPoint) return;
-  const pointer = canvas.getPointer(e.e);
-  const snappedX = snapToGrid(pointer.x);
-  const snappedY = snapToGrid(pointer.y);
-  const preview = canvas.getObjects().find(obj => obj.id === 'preview-line');
-  if (preview) {
-    preview.set({ x2: snappedX, y2: snappedY });
-    preview.setCoords();
-    canvas.requestRenderAll();
+  // Snap-индикатор: рисуем подсказку даже до первого клика (когда
+  // lineStartPoint=null), чтобы юзер видел «куда дотянется» перед началом
+  // линии. В режимах placement/cross-layer индикатор не нужен.
+  if (isDrawingLine) {
+    const pointer = canvas.getPointer(e.e);
+    updateSnapIndicator(pointer);
+    if (!lineStartPoint) return;
+    let snappedX = snapToGrid(pointer.x);
+    let snappedY = snapToGrid(pointer.y);
+    const snapNode = findNearestNetworkNode(pointer, 18);
+    if (snapNode) {
+      snappedX = snapNode.x;
+      snappedY = snapNode.y;
+    }
+    const preview = canvas.getObjects().find(obj => obj.id === 'preview-line');
+    if (preview) {
+      preview.set({ x2: snappedX, y2: snappedY });
+      preview.setCoords();
+      canvas.requestRenderAll();
+    }
+    return;
   }
+  // Не в режиме рисования — индикатор скрыт.
+  if (_snapIndicator) clearSnapIndicator();
 }
 
 function handleCanvasMouseOut() {
@@ -562,9 +717,17 @@ function handleCanvasMouseOut() {
     });
     scheduleRender();
   }
+  // Курсор ушёл с холста — снимаем snap-индикатор.
+  clearSnapIndicator();
 }
 
 function handleCanvasDoubleClick(e) {
+  // п.8 (2026-05-13): модалка свойств открывается ТОЛЬКО в режиме «стрелка»
+  // (selection). Если активен любой placement-mode — рисование линии,
+  // подвешенная картинка для постановки, режим cross-layer — игнорируем
+  // дабл-клик. Иначе двойной щелчок при старте рисования из узла пересечения
+  // мгновенно открывает Properties и сбивает работу.
+  if (isDrawingLine || currentImageData || isCrossLayerMode) return;
   if (e.target) {
     canvas.setActiveObject(e.target);
     showObjectPropertiesModal();
@@ -649,6 +812,7 @@ function deactivateAllModes() {
   const lineBtn = document.getElementById('lineDrawingBtn');
   if (lineBtn) lineBtn.classList.remove('active');
   cleanupPreviewLines();
+  clearSnapIndicator();
   previewLine = null;
   lineStartPoint = null;
   lastLineEndPoint = null;
@@ -1036,6 +1200,9 @@ global.updateCanvasSize = updateCanvasSize;
 global.drawGrid = drawGrid;
 global.toggleGrid = toggleGrid;
 global.snapToGrid = snapToGrid;
+global.findNearestNetworkNode = findNearestNetworkNode;
+global.updateSnapIndicator = updateSnapIndicator;
+global.clearSnapIndicator = clearSnapIndicator;
 global.setupCanvasEvents = setupCanvasEvents;
 global.handleCanvasMouseDown = handleCanvasMouseDown;
 global.handleLineDrawingStart = handleLineDrawingStart;

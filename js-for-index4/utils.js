@@ -38,11 +38,13 @@
   if (!global.notificationLog) global.notificationLog = [];
   const NOTIF_LOG_LIMIT = 500; // защита от взрывного роста — старые скидываем
 
+  // Авто-скрытие плавающих уведомлений (мс). Журнал хранит ВСЁ независимо —
+  // тут речь только про карточку на холсте, чтобы она не закрывала схему.
+  // Запрос заказчика 2026-05-13: 10 сек.
+  const NOTIF_AUTO_HIDE_MS = 10000;
+
   function showNotification(msg, type, duration) {
     type = type || 'info';
-    // duration больше не используется для авто-скрытия — пользователь явно
-    // попросил оставлять уведомления видимыми до ручного закрытия (×).
-    // Параметр сохранён в сигнатуре для обратной совместимости.
 
     // 1) Логируем независимо от наличия контейнера
     try {
@@ -62,8 +64,8 @@
     const container = document.getElementById('notificationContainer');
     if (!container) return;
 
-    // 2) Создаём блок: текст + крестик закрытия. БЕЗ таймера авто-скрытия —
-    // удаление только по клику на ×.
+    // 2) Создаём блок: текст + крестик закрытия. Авто-скрытие через
+    // NOTIF_AUTO_HIDE_MS; ✕ закрывает сразу. Журнал хранит запись навсегда.
     const notif = document.createElement('div');
     notif.className = 'notification ' + type;
     notif.style.cssText = 'display:flex; align-items:flex-start; gap:8px; opacity:1;';
@@ -72,6 +74,14 @@
     text.className = 'notification-message';
     text.textContent = String(msg);
     text.style.flex = '1';
+
+    let hideTimer = null;
+    function dismiss() {
+      if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+      notif.style.transition = 'opacity 0.2s';
+      notif.style.opacity = '0';
+      setTimeout(() => { if (notif.parentNode) notif.parentNode.removeChild(notif); }, 220);
+    }
 
     const closeBtn = document.createElement('button');
     closeBtn.type = 'button';
@@ -82,15 +92,15 @@
       'color:var(--color-text-secondary,#888)', 'font-size:18px',
       'line-height:1', 'padding:0 2px', 'margin-left:4px', 'flex-shrink:0'
     ].join(';');
-    closeBtn.addEventListener('click', function() {
-      notif.style.transition = 'opacity 0.2s';
-      notif.style.opacity = '0';
-      setTimeout(() => { if (notif.parentNode) notif.parentNode.removeChild(notif); }, 220);
-    });
+    closeBtn.addEventListener('click', dismiss);
 
     notif.appendChild(text);
     notif.appendChild(closeBtn);
     container.appendChild(notif);
+
+    // Длительность можно переопределить аргументом — но по умолчанию 20 сек.
+    const hideMs = (typeof duration === 'number' && duration > 0) ? duration : NOTIF_AUTO_HIDE_MS;
+    hideTimer = setTimeout(dismiss, hideMs);
   }
 
   function getNotificationLog() {

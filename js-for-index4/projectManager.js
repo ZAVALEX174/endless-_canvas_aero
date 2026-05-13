@@ -173,6 +173,14 @@
         invalidateCache();
         updateConnectionGraph();
         updateAllAirVolumeTexts();
+        // 2026-05-13: пересоздаём маркеры узлов после загрузки .vnet.
+        // Иначе сохранённые в файле orphan-кружки (от пред. версий, где
+        // Delete не чистил маркеры) восстанавливаются как кликабельные
+        // selectable-объекты и юзер случайно их выделяет — выглядит как
+        // «потащил пустое место» (move-cursor + bbox).
+        if (typeof rebuildNodeMarkers === 'function') {
+          setTimeout(rebuildNodeMarkers, 50);
+        }
       }, 500);
 
       canvas.renderAll();

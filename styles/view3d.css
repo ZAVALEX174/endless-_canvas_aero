@@ -87,6 +87,7 @@
   right: 14px;
   width: 220px;
   background: rgba(20, 24, 38, 0.88);
+  -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
   border: 1px solid #2a3148;
   border-radius: 6px;
@@ -182,8 +183,12 @@
   opacity: 0.4;
 }
 
-/* Поле elevation в панели слоёв */
-.layer-elevation-input {
+/* Поле elevation в панели слоёв.
+   Селектор `input.layer-elevation-input` поднимает specificity до (0,0,2,1),
+   чтобы перебить общее правило `input[type="number"] { width: 100% }` из
+   components.css (specificity 0,0,1,1). Без этого input занимал всю ширину
+   строки и elevation-поле вытесняло имя слоя за пределы панели. */
+input.layer-elevation-input {
   width: 52px;
   font-size: 10px;
   padding: 1px 3px;
@@ -194,9 +199,20 @@
   text-align: right;
   flex-shrink: 0;
   margin-right: 2px;
+  box-sizing: border-box;
+  /* macOS Safari/Chrome рендерит native spinner-кнопки внутри input[type=number]
+     шире 52px — строка слоя вылезает за правый край панели. Прячем spinner. */
+  -webkit-appearance: textfield;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+input.layer-elevation-input::-webkit-inner-spin-button,
+input.layer-elevation-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
-.layer-elevation-input:focus {
+input.layer-elevation-input:focus {
   outline: none;
   border-color: var(--color-accent, #4a9eff);
 }

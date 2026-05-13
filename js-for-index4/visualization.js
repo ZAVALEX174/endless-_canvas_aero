@@ -152,21 +152,27 @@ function createOrUpdateAirVolumeText(line) {
   if (!parts.length) parts.push(`${directionArrow} ${Math.abs(q).toFixed(3)} м³/с`);
   const labelText = parts.join('\n');
 
-  // п.3: цвет стрелки отражает состояние струи —
-  //   свежая (от вентилятора-источника до загрязнителя)  → красный
-  //   загрязнённая (после загрязнителя)                   → синий
-  // Состояние выставляет applyFlowColoring через line._flowColorState.
-  // Для линий без расчёта/без источника — дефолтный цвет из CSS-переменной.
-  let textFill = (typeof getCV === 'function' ? getCV('--canvas-text-fill') : '#E8E9F5') || '#E8E9F5';
-  if (line._flowColorState === 'fresh') textFill = FLOW_FRESH_COLOR;
-  else if (line._flowColorState === 'contaminated') textFill = FLOW_CONTAMINATED_COLOR;
+  // п.3 (правка 2026-05-13): красим ТОЛЬКО сам символ стрелки (→ или ←),
+  // а цифры в подписи остаются нейтральным цветом темы. Линии тоже больше
+  // не перекрашиваются — applyFlowColoring пишет только _flowColorState.
+  // Заказчик: «раскрасить только стрелки, линии и подписи не надо».
+  const baseFill = (typeof getCV === 'function' ? getCV('--canvas-text-fill') : '#E8E9F5') || '#E8E9F5';
+  let arrowFill = baseFill;
+  if (line._flowColorState === 'fresh') arrowFill = FLOW_FRESH_COLOR;
+  else if (line._flowColorState === 'contaminated') arrowFill = FLOW_CONTAMINATED_COLOR;
 
-  const text = new fabric.Text(labelText, {
+  // Per-character styles: стрелка всегда первый символ строки 0
+  // (`→ 0.000 м³/с` / `←`). fabric.IText поддерживает styles[line][char].
+  const arrowStyles = (arrowFill !== baseFill)
+    ? { 0: { 0: { fill: arrowFill } } }
+    : undefined;
+
+  const text = new fabric.IText(labelText, {
     left: midX + offsetX,
     top: midY + offsetY,
     fontSize: opts.fontSize || 12,
     fontFamily: 'Arial',
-    fill: textFill,
+    fill: baseFill,
     fontWeight: 'bold',
     textAlign: 'center',
     lineHeight: 1.1,
@@ -174,12 +180,14 @@ function createOrUpdateAirVolumeText(line) {
     padding: 4,
     selectable: false,
     evented: false,
+    editable: false,
     originX: 'center',
     originY: 'center',
     angle: drawAngle,
     lockMovementX: true,
     lockMovementY: true,
-    id: 'air-volume-text'
+    id: 'air-volume-text',
+    styles: arrowStyles || {}
   });
   line.airVolumeText = text;
   // Скрыть текст если линия скрыта (слой выключен)
@@ -342,15 +350,28 @@ if (typeof global.flowColoringEnabled === 'undefined') global.flowColoringEnable
 
 function clearFlowColoring() {
   var restored = 0;
+  var defaultColor = (typeof APP_CONFIG !== 'undefined' && APP_CONFIG.DEFAULT_LINE_COLOR) || '#6A7FDB';
   getCachedLines().forEach(function(line) {
+    // Восстанавливаем оригинальный stroke если он сохранён старой версией
+    // applyFlowColoring (backward-compat).
     if (line._originalStrokeForFlow !== undefined) {
       line.set('stroke', line._originalStrokeForFlow);
       delete line._originalStrokeForFlow;
       restored++;
     }
-    // п.3: сбрасываем цвет стрелки тоже — иначе текст останется красным/синим
+    // Backward-compat для .vnet, сохранённых предыдущей версией: тогда
+    // line.stroke = FLOW_*_COLOR и попало прямо в JSON. После моих правок
+    // линии не должны нести «состояние потока» в stroke — возвращаем дефолт
+    // (или цвет слоя если он есть).
+    if (line.stroke === FLOW_FRESH_COLOR || line.stroke === FLOW_CONTAMINATED_COLOR) {
+      line.set('stroke', defaultColor);
+      if (typeof applyLayerColorToObject === 'function') applyLayerColorToObject(line);
+      restored++;
+    }
+    // Сбрасываем состояние стрелки — текст пересоздастся без цветного стиля.
     if (line._flowColorState !== undefined) {
       delete line._flowColorState;
+      restored++;
     }
   });
   if (restored) {
@@ -468,7 +489,10 @@ function applyFlowColoring(calculationResult) {
     }
   });
 
-  // 3) Применяем цвета к линиям
+  // 3) Записываем состояние потока в _flowColorState. Сами линии больше НЕ
+  // перекрашиваются (заказчик: «раскрасить только стрелки, линии и подписи
+  // не надо») — цвет применяется только к символу стрелки в подписи
+  // через per-character styles в createOrUpdateAirVolumeText.
   var freshCount = 0;
   var contaminatedCount = 0;
   var byId = new Map(edges.map(function(e) { return [e.id, e]; }));
@@ -476,15 +500,10 @@ function applyFlowColoring(calculationResult) {
     var edge = byId.get(edgeId);
     if (!edge || !edge.line) return;
     var line = edge.line;
-    if (line._originalStrokeForFlow === undefined) {
-      line._originalStrokeForFlow = line.stroke;
-    }
     if (state === 'fresh') {
-      line.set('stroke', FLOW_FRESH_COLOR);
       line._flowColorState = 'fresh';
       freshCount++;
     } else {
-      line.set('stroke', FLOW_CONTAMINATED_COLOR);
       line._flowColorState = 'contaminated';
       contaminatedCount++;
     }

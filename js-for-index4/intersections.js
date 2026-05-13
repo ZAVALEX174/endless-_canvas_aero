@@ -121,10 +121,20 @@ function createIntersectionPoint(x, y, index, data, color = '#ff4757') {
 
   circle.on('mouseup', function (e) {
     if (!this._hasDragged) {
-      const cx = this.left;
-      const cy = this.top;
-      const info = collectPointInfo(cx, cy);
-      showIntersectionPointInfoModal(info);
+      // п.8 (2026-05-13): модалку точки пересечения открываем ТОЛЬКО в
+      // режиме «стрелка». В режиме рисования/размещения/cross-layer клик
+      // по узлу должен начинать новую линию из этого узла, а не открывать
+      // Properties. (Аналогичная защита есть в handleCanvasDoubleClick.)
+      var inDrawingMode =
+        (typeof isDrawingLine !== 'undefined' && isDrawingLine) ||
+        (typeof currentImageData !== 'undefined' && currentImageData) ||
+        (typeof isCrossLayerMode !== 'undefined' && isCrossLayerMode);
+      if (!inDrawingMode) {
+        const cx = this.left;
+        const cy = this.top;
+        const info = collectPointInfo(cx, cy);
+        showIntersectionPointInfoModal(info);
+      }
     }
     this._hasDragged = false;
   });
